@@ -545,7 +545,7 @@ const matrows   = document.getElementById('matrows');
 const matData   = [];
 
 // ── Búsqueda de producto en Stel Order ────────────────────
-async function buscarProducto(barcode, descInput) {
+async function buscarProducto(barcode, descInput, refInput) {
   if (!barcode || !descInput) return;
   const prev = descInput.value;
   descInput.classList.add('buscando');
@@ -562,6 +562,10 @@ async function buscarProducto(barcode, descInput) {
 
     if (data.found && data.nombre) {
       descInput.value = data.nombre;
+      // Actualizar REF con la referencia interna del producto (no el código de barras)
+      if (refInput && data.referencia) {
+        refInput.value = data.referencia;
+      }
       descInput.classList.add('encontrado');
       setTimeout(() => descInput.classList.remove('encontrado'), 2000);
       showToast('✅ Producto encontrado');
@@ -661,7 +665,7 @@ for (let i = 0; i < 12; i++) {
 
   // Pistola – Enter = búsqueda inmediata
   refInput.addEventListener('keydown', e => {
-    if (e.key === 'Enter') { e.preventDefault(); buscarProducto(refInput.value.trim(), descInput); }
+    if (e.key === 'Enter') { e.preventDefault(); buscarProducto(refInput.value.trim(), descInput, refInput); }
   });
 
   // Pistola – debounce (si no envía Enter)
@@ -669,7 +673,7 @@ for (let i = 0; i < 12; i++) {
   refInput.addEventListener('input', () => {
     clearTimeout(debTimer);
     const v = refInput.value.trim();
-    if (v.length >= 6) debTimer = setTimeout(() => buscarProducto(v, descInput), 600);
+    if (v.length >= 6) debTimer = setTimeout(() => buscarProducto(v, descInput, refInput), 600);
   });
 }
 
@@ -709,7 +713,7 @@ function startQuagga() {
       activeInput.value = code;
       const desc = activeDescInput;
       closeScanner();
-      if (desc) buscarProducto(code, desc);
+      if (desc) buscarProducto(code, desc, activeInput);
     }
   });
 }
