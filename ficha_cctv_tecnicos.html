@@ -111,11 +111,26 @@
     width: 100%;
   }
 
-  /* Columnas: [btn-scan] [REF] [DESCRIPCIÓN] [scan+SERIE] [IP] [UBICACIÓN] [CABLE] */
+  /* Tabla material: scroll horizontal en móvil */
+  .mat-wrap {
+    overflow-x: auto;
+    -webkit-overflow-scrolling: touch;
+    border: 0.5px solid #ddd;
+    border-radius: 4px;
+  }
+  .mat-table { min-width: 680px; }
+
+  /* Columnas: [btn-scan] [REF] [DESCRIPCIÓN] [scan+SERIE] [SERIE] [IP] [UBICACIÓN] [CABLE] */
   .mat-hdr,
   .mat-r {
     display: grid;
-    grid-template-columns: 28px 100px 1fr 28px 100px 72px 90px 72px;
+    grid-template-columns: 32px 110px 1fr 32px 110px 80px 100px 70px;
+  }
+  /* Inputs dentro de la tabla no desbordan */
+  .mat-r .cell input {
+    width: 100%;
+    min-width: 0;
+    box-sizing: border-box;
   }
 
   .mat-hdr {
