@@ -420,6 +420,13 @@
       <div id="matrows"></div>
     </div>
   </div>
+  <div style="text-align:right;margin-top:4px;">
+    <button onclick="addMaterialRow()" style="
+      background:#1a3a6b;color:#fff;border:none;border-radius:6px;
+      padding:8px 18px;font-size:14px;cursor:pointer;">
+      ➕ Añadir fila
+    </button>
+  </div>
 
   <!-- ── CONFIGURACIÓN DEL SISTEMA ────────────────────────── -->
   <div class="sec">CONFIGURACIÓN DEL SISTEMA</div>
@@ -712,16 +719,22 @@ function addMaterialRow() {
   });
 
   // Auto-añadir fila cuando se empieza a rellenar la última fila
+  // Usa 'input' y 'change' para capturar tanto teclado como escáner
+  function checkUltimaFila() {
+    const esUltima = matData[matData.length - 1] === rowData;
+    if (esUltima && (refInput.value.trim() || descInput.value.trim() || serieInput.value.trim())) {
+      addMaterialRow();
+    }
+  }
   [refInput, descInput, serieInput, ipInput, ubicInput, cableInput].forEach(inp => {
-    inp.addEventListener('input', () => {
-      const esUltima = matData[matData.length - 1] === rowData;
-      if (esUltima && inp.value.trim()) addMaterialRow();
-    });
+    inp.addEventListener('input', checkUltimaFila);
+    inp.addEventListener('change', checkUltimaFila);
   });
+  rowData._checkUltimaFila = checkUltimaFila;
 }
 
-// Crear las primeras 6 filas al cargar
-for (let i = 0; i < 6; i++) addMaterialRow();
+// Crear las primeras 10 filas al cargar
+for (let i = 0; i < 10; i++) addMaterialRow();
 
 // ── Escáner de cámara ─────────────────────────────────────
 function openScanner(refInput, descInput, campo) {
@@ -758,8 +771,11 @@ function startQuagga() {
     if (code && activeInput) {
       activeInput.value = code;
       const desc = activeDescInput;
+      const lastRow = matData[matData.length - 1];
       closeScanner();
       if (desc) buscarProducto(code, desc, activeInput);
+      // Comprobar si hay que añadir fila nueva tras escanear
+      if (lastRow && lastRow._checkUltimaFila) lastRow._checkUltimaFila();
     }
   });
 }
