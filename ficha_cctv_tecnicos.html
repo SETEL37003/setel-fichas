@@ -1,1 +1,881 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0">
+<title>Ficha CCTV – SETEL Seguridad</title>
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@tabler/icons-webfont@2.44.0/tabler-icons.min.css">
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=Barlow:wght@400;600;700&display=swap');
 
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+  body {
+    font-family: 'Barlow', sans-serif;
+    font-size: 12px;
+    background: #f0f2f5;
+    padding: 8px;
+  }
+
+  /* ── Estructura general ─────────────────────────────────── */
+  .ficha {
+    background: #fff;
+    border: 1px solid #ccc;
+    max-width: 900px;
+    margin: 0 auto;
+    border-radius: 4px;
+    overflow: hidden;
+  }
+
+  .hdr-top {
+    background: #1a3a6b;
+    color: #fff;
+    padding: 6px 10px;
+    font-size: 11px;
+    font-weight: 600;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    letter-spacing: 0.3px;
+  }
+
+  .hdr-title {
+    background: #f5a623;
+    color: #412402;
+    text-align: center;
+    padding: 5px;
+    font-size: 14px;
+    font-weight: 700;
+    letter-spacing: 0.5px;
+  }
+
+  .sec {
+    background: #1a3a6b;
+    color: #fff;
+    padding: 4px 8px;
+    font-size: 11px;
+    font-weight: 700;
+    letter-spacing: 0.4px;
+    margin-top: 2px;
+  }
+
+  /* ── Filas del formulario ────────────────────────────────── */
+  .row {
+    display: grid;
+    border-bottom: 0.5px solid #ddd;
+  }
+
+  .cell {
+    padding: 3px 6px;
+    border-right: 0.5px solid #ddd;
+    display: flex;
+    align-items: center;
+    gap: 4px;
+    min-height: 26px;
+  }
+  .cell:last-child { border-right: none; }
+
+  .lbl {
+    color: #666;
+    font-size: 9px;
+    font-weight: 700;
+    white-space: nowrap;
+    letter-spacing: 0.3px;
+    text-transform: uppercase;
+    flex-shrink: 0;
+  }
+
+  .f {
+    flex: 1;
+    border: none;
+    background: transparent;
+    font-size: 12px;
+    font-weight: 600;
+    color: #1a1a1a;
+    outline: none;
+    min-width: 0;
+    font-family: 'Barlow', sans-serif;
+    padding: 2px 0;
+  }
+  .f:focus { background: #fffde7; border-radius: 2px; }
+  select.f { cursor: pointer; }
+
+  /* ── Tabla de material ───────────────────────────────────── */
+  .mat-wrap {
+    overflow-x: auto;
+    -webkit-overflow-scrolling: touch;
+  }
+
+  .mat-table {
+    min-width: 560px;
+    width: 100%;
+  }
+
+  /* Columnas: [btn-scan] [REF] [DESCRIPCIÓN] [scan+SERIE] [IP] [UBICACIÓN] [CABLE] */
+  .mat-hdr,
+  .mat-r {
+    display: grid;
+    grid-template-columns: 28px 100px 1fr 28px 100px 72px 90px 72px;
+  }
+
+  .mat-hdr {
+    background: #f5a623;
+    color: #412402;
+    font-size: 10px;
+    font-weight: 700;
+    text-transform: uppercase;
+  }
+
+  .mat-r { border-bottom: 0.5px solid #ddd; }
+  .mat-r:nth-child(even) { background: #fafafa; }
+
+  .mat-hdr .cell,
+  .mat-r .cell { padding: 4px 5px; min-height: 26px; }
+
+  /* Botones de escáner */
+  .scan-btn {
+    background: none;
+    border: none;
+    cursor: pointer;
+    padding: 2px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    color: #1a3a6b;
+    flex-shrink: 0;
+    border-radius: 3px;
+    width: 22px;
+    height: 22px;
+  }
+  .scan-btn:hover { background: #f5a623; color: #412402; }
+  .scan-btn:active { background: #1a3a6b; color: #fff; }
+  .scan-btn i { font-size: 15px; }
+
+  /* ── Overlay escáner ────────────────────────────────────── */
+  #scan-overlay {
+    display: none;
+    position: fixed;
+    top: 0; left: 0;
+    width: 100%; height: 100%;
+    background: rgba(0,0,0,0.9);
+    z-index: 1000;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    padding: 20px 16px;
+  }
+  #scan-overlay.active { display: flex; }
+
+  #scan-label {
+    color: #f5a623;
+    font-size: 13px;
+    font-weight: 600;
+    margin-bottom: 10px;
+    letter-spacing: 0.3px;
+  }
+
+  #scan-video {
+    width: 100%;
+    max-width: 380px;
+    border-radius: 8px;
+    border: 2px solid #f5a623;
+  }
+
+  #scan-status {
+    color: #fff;
+    font-size: 12px;
+    margin-top: 10px;
+    text-align: center;
+  }
+
+  .scan-hint { color: #B5D4F4; font-size: 11px; margin-top: 4px; text-align: center; }
+
+  #scan-cancel {
+    margin-top: 14px;
+    background: #f5a623;
+    color: #412402;
+    border: none;
+    padding: 10px 32px;
+    border-radius: 6px;
+    font-size: 14px;
+    font-weight: 600;
+    cursor: pointer;
+  }
+
+  /* ── Botones de acción ──────────────────────────────────── */
+  .btns-row {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 0;
+    margin-top: 2px;
+  }
+
+  .btn-accion {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 6px;
+    padding: 12px 8px;
+    border: none;
+    font-size: 13px;
+    font-weight: 600;
+    cursor: pointer;
+    font-family: 'Barlow', sans-serif;
+    letter-spacing: 0.2px;
+  }
+
+  .btn-excel {
+    background: #1d6f42;
+    color: #fff;
+  }
+  .btn-excel:hover { background: #155533; }
+
+  .btn-stel {
+    background: #1a3a6b;
+    color: #fff;
+  }
+  .btn-stel:hover { background: #f5a623; color: #412402; }
+
+  .btn-accion i { font-size: 17px; }
+
+  /* ── Footer ─────────────────────────────────────────────── */
+  .footer {
+    background: #1a3a6b;
+    color: #B5D4F4;
+    text-align: center;
+    font-size: 10px;
+    padding: 5px 8px;
+  }
+
+  /* ── Toast ───────────────────────────────────────────────── */
+  #toast {
+    display: none;
+    position: fixed;
+    bottom: 24px;
+    left: 50%;
+    transform: translateX(-50%);
+    background: #1a3a6b;
+    color: #fff;
+    padding: 10px 22px;
+    border-radius: 8px;
+    font-size: 13px;
+    z-index: 2000;
+    white-space: nowrap;
+    box-shadow: 0 4px 12px rgba(0,0,0,0.25);
+  }
+
+  /* ── Feedback búsqueda Stel Order ───────────────────────── */
+  .buscando   { background: #fff8e6 !important; border-radius: 2px; }
+  .encontrado { background: #e8f5e9 !important; border-radius: 2px; transition: background 0.6s; }
+  .no-enc     { background: #fdecea !important; border-radius: 2px; }
+
+  /* ── Responsive móvil ───────────────────────────────────── */
+  @media (max-width: 480px) {
+    body { padding: 4px; }
+    .hdr-top { font-size: 10px; }
+    .hdr-title { font-size: 13px; }
+    .btns-row { grid-template-columns: 1fr; }
+    .btn-accion { padding: 14px 8px; font-size: 14px; }
+    /* Datos cliente: apilar a 2 columnas en pantallas pequeñas */
+    .row-4col { grid-template-columns: 1fr 1fr !important; }
+    .row-3col { grid-template-columns: 1fr 1fr !important; }
+  }
+</style>
+</head>
+<body>
+
+<div id="scan-overlay">
+  <div id="scan-label">Apunta al código de barras</div>
+  <video id="scan-video" autoplay playsinline muted></video>
+  <div id="scan-status">Iniciando cámara...</div>
+  <div class="scan-hint">El código se leerá automáticamente</div>
+  <button id="scan-cancel">✕ Cancelar</button>
+</div>
+
+<div id="toast"></div>
+
+<div class="ficha">
+
+  <!-- Cabecera -->
+  <div class="hdr-top">
+    <span>Técnicos de Servicios Múltiples S.L.</span>
+    <span>SETEL Seguridad</span>
+  </div>
+  <div class="hdr-title">FICHA INSTALACIÓN CCTV / SEGURIDAD</div>
+
+  <!-- ── DATOS DEL CLIENTE ─────────────────────────────────── -->
+  <div class="sec">DATOS DEL CLIENTE</div>
+
+  <!-- Aviso | Contrato | Cliente | Fecha (auto) -->
+  <div class="row row-4col" style="grid-template-columns: 1fr 1fr 1fr 130px;">
+    <div class="cell" style="position:relative;">
+      <span class="lbl">BUSCAR CLIENTE</span>
+      <input class="f" id="aviso" type="text" placeholder="Escribe nombre del cliente…" autocomplete="off">
+      <span id="aviso-spin" style="display:none;font-size:14px;">⏳</span>
+      <div id="cliente-dropdown" style="
+        display:none;position:absolute;top:100%;left:0;right:0;z-index:999;
+        background:#fff;border:2px solid #1a3a6b;border-radius:6px;
+        box-shadow:0 4px 12px rgba(0,0,0,0.2);max-height:220px;overflow-y:auto;">
+      </div>
+    </div>
+    <div class="cell"><span class="lbl">Nº CONTRATO</span><input class="f" id="contrato" type="text"></div>
+    <div class="cell"><span class="lbl">Nº CLIENTE</span><input class="f" id="cliente" type="text"></div>
+    <div class="cell"><span class="lbl">FECHA</span><input class="f" id="fecha" type="date" style="font-size:13px;"></div>
+  </div>
+
+  <div class="row" style="grid-template-columns:1fr;">
+    <div class="cell"><span class="lbl">NOMBRE COMERCIAL</span><input class="f" id="nomcom" type="text"></div>
+  </div>
+  <div class="row" style="grid-template-columns:1fr;">
+    <div class="cell"><span class="lbl">NOMBRE</span><input class="f" id="nombre" type="text"></div>
+  </div>
+  <div class="row row-3col" style="grid-template-columns:1fr 140px 80px;">
+    <div class="cell"><span class="lbl">DIRECCIÓN INSTAL.</span><input class="f" id="dir" type="text"></div>
+    <div class="cell"><span class="lbl">POBLACIÓN</span><input class="f" id="pobl" type="text"></div>
+    <div class="cell"><span class="lbl">C.P.</span><input class="f" id="cp" type="text" maxlength="5"></div>
+  </div>
+  <div class="row row-3col" style="grid-template-columns:1fr 1fr 1fr;">
+    <div class="cell"><span class="lbl">PERSONA CONTACTO</span><input class="f" id="contacto" type="text"></div>
+    <div class="cell"><span class="lbl">TLFNO</span><input class="f" id="tlfno" type="text"></div>
+    <div class="cell"><span class="lbl">E-MAIL</span><input class="f" id="email" type="text"></div>
+  </div>
+
+  <!-- Mantenimiento | Vía pública | Video veri | Técnico -->
+  <div class="row row-4col" style="grid-template-columns: 100px 100px 100px 1fr;">
+    <div class="cell">
+      <span class="lbl">MANT.</span>
+      <select class="f" id="mant">
+        <option value="">—</option><option>Sí</option><option>No</option>
+      </select>
+    </div>
+    <div class="cell">
+      <span class="lbl">VÍA PÚB.</span>
+      <select class="f" id="via">
+        <option value="">—</option><option>Sí</option><option>No</option>
+      </select>
+    </div>
+    <div class="cell">
+      <span class="lbl">VIDEO VER.</span>
+      <select class="f" id="video">
+        <option value="">—</option><option>Sí</option><option>No</option>
+      </select>
+    </div>
+    <div class="cell">
+      <span class="lbl">TÉCNICO</span>
+      <select class="f" id="tecnico">
+        <option value="">— Seleccionar —</option>
+        <option>Alberto H</option>
+        <option>Alberto S</option>
+        <option>Alberto V</option>
+        <option>Antonio H</option>
+        <option>Cristian</option>
+        <option>Emilio</option>
+        <option>Iban</option>
+        <option>Javi</option>
+        <option>Jose Luis</option>
+        <option>Josemi</option>
+        <option>Juanma</option>
+        <option>Marcos</option>
+        <option>Mario</option>
+        <option>Moro</option>
+        <option>Paul</option>
+        <option>Ruben</option>
+        <option>Yuri</option>
+      </select>
+    </div>
+  </div>
+
+  <!-- ── MATERIAL INSTALADO ────────────────────────────────── -->
+  <div class="sec">MATERIAL INSTALADO</div>
+
+  <div class="mat-wrap">
+    <div class="mat-table">
+      <!-- Cabecera tabla -->
+      <div class="mat-hdr">
+        <div class="cell" title="Escáner REF"></div>
+        <div class="cell">REFERENCIA</div>
+        <div class="cell">DESCRIPCIÓN</div>
+        <div class="cell" title="Escáner SERIE"></div>
+        <div class="cell">Nº SERIE</div>
+        <div class="cell">IP</div>
+        <div class="cell">UBICACIÓN</div>
+        <div class="cell">CABLE</div>
+      </div>
+      <!-- Filas dinámicas -->
+      <div id="matrows"></div>
+    </div>
+  </div>
+
+  <!-- ── CONFIGURACIÓN DEL SISTEMA ────────────────────────── -->
+  <div class="sec">CONFIGURACIÓN DEL SISTEMA</div>
+  <div class="row row-3col" style="grid-template-columns:1fr 1fr 1fr;">
+    <div class="cell"><span class="lbl">DOMINIO</span><input class="f" id="dom" type="text"></div>
+    <div class="cell"><span class="lbl">DIRECCIÓN IP</span><input class="f" id="ip" type="text"></div>
+    <div class="cell"><span class="lbl">CÁMARAS IP</span><input class="f" id="camip" type="text"></div>
+  </div>
+  <div class="row row-3col" style="grid-template-columns:1fr 1fr 1fr;">
+    <div class="cell"><span class="lbl">PUERTO</span><input class="f" id="puerto" type="text"></div>
+    <div class="cell"><span class="lbl">PUERTO WEB</span><input class="f" id="puertow" type="text"></div>
+    <div class="cell"><span class="lbl">P2P</span><input class="f" id="p2p" type="text"></div>
+  </div>
+  <div class="row row-3col" style="grid-template-columns:1fr 1fr 1fr;">
+    <div class="cell"><span class="lbl">DÍAS GRABADOS</span><input class="f" id="dias" type="text"></div>
+    <div class="cell"><span class="lbl">ADMIN</span><input class="f" id="adm" type="text"></div>
+    <div class="cell"><span class="lbl">USER</span><input class="f" id="usr" type="text"></div>
+  </div>
+  <div class="row" style="grid-template-columns:1fr;">
+    <div class="cell"><span class="lbl">CLAVE ADMIN</span><input class="f" id="adm1" type="text"></div>
+  </div>
+
+  <!-- ── OBSERVACIONES ─────────────────────────────────────── -->
+  <div class="sec">OBSERVACIONES / NOTAS</div>
+  <div style="border-bottom: 0.5px solid #ddd;">
+    <textarea class="f" id="obs"
+      style="width:100%;min-height:56px;padding:6px;resize:vertical;border:none;
+             font-family:'Barlow',sans-serif;font-size:12px;display:block;
+             background:transparent;color:#1a1a1a;"></textarea>
+  </div>
+
+  <!-- ── Botones ───────────────────────────────────────────── -->
+  <div class="btns-row">
+    <button class="btn-accion btn-excel" id="btn-excel">
+      <i class="ti ti-file-spreadsheet"></i> Descargar Excel
+    </button>
+    <button class="btn-accion btn-stel" id="btn-stel">
+      <i class="ti ti-cloud-upload"></i> Enviar a Stel Order
+    </button>
+  </div>
+
+  <div class="footer">
+    Técnicos de Servicios Múltiples S.L. · SETEL Seguridad · 923 12 50 97 · seguridad@setelgrupo.com · DGP Nº 2.900
+  </div>
+</div>
+
+<script src="https://cdn.jsdelivr.net/npm/quagga@0.12.1/dist/quagga.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
+<script>
+'use strict';
+
+// ── Configuración ──────────────────────────────────────────
+// SERVIDOR_URL se define dinámicamente más abajo
+
+// ── Auto-rellenar fecha de hoy ─────────────────────────────
+document.getElementById('fecha').value = new Date().toISOString().slice(0, 10);
+
+// ── Preseleccionar técnico si viene en la URL ───────────────
+// El servidor inyecta: window.TECNICO_PRESELECCIONADO = "Javi"
+if (window.TECNICO_PRESELECCIONADO) {
+  const sel = document.getElementById('tecnico');
+  const nombre = window.TECNICO_PRESELECCIONADO.toLowerCase();
+  for (let opt of sel.options) {
+    if (opt.value.toLowerCase() === nombre ||
+        opt.value.toLowerCase().startsWith(nombre)) {
+      sel.value = opt.value;
+      break;
+    }
+  }
+}
+
+// ── URL del servidor: local o en la nube (mismo origen) ────
+// Si la ficha se abre desde el servidor Flask, las llamadas
+// van al mismo servidor automáticamente (sin hardcodear localhost)
+const SERVIDOR_URL = (window.location.hostname === 'localhost' ||
+                      window.location.hostname === '127.0.0.1' ||
+                      window.location.hostname.match(/^10\.|^192\.168\.|^172\./))
+  ? `http://${window.location.host}`   // local/red local
+  : window.location.origin;            // nube (Railway, etc.)
+
+// ── Buscador de cliente por nombre ─────────────────────────
+const avisoInput      = document.getElementById('aviso');
+const avisoSpin       = document.getElementById('aviso-spin');
+const clienteDropdown = document.getElementById('cliente-dropdown');
+
+function rellenarCliente(c) {
+  const set = (id, val) => { const el = document.getElementById(id); if (el && val != null) el.value = val; };
+  set('cliente',  c.id     || '');
+  set('nomcom',   c.nombre || '');
+  set('nombre',   c.nombre || '');
+  set('dir',      c.dir    || '');
+  set('pobl',     c.pobl   || '');
+  set('cp',       c.cp     || '');
+  set('tlfno',    c.tlfno  || '');
+  set('email',    c.email  || '');
+  avisoInput.value = c.nombre || '';
+  clienteDropdown.style.display = 'none';
+  showToast('✅ Cliente cargado');
+}
+
+function mostrarDropdown(clientes) {
+  clienteDropdown.innerHTML = '';
+  if (!clientes.length) {
+    clienteDropdown.innerHTML = '<div style="padding:10px;color:#888;font-size:13px;">Sin resultados</div>';
+    clienteDropdown.style.display = 'block';
+    return;
+  }
+  clientes.forEach(c => {
+    const item = document.createElement('div');
+    item.style.cssText = 'padding:10px 12px;cursor:pointer;border-bottom:1px solid #eee;font-size:13px;';
+    item.innerHTML = `<strong>${c.nombre}</strong>${c.dir ? '<br><span style="color:#666;font-size:12px;">'+c.dir+(c.pobl?', '+c.pobl:'')+'</span>' : ''}`;
+    item.addEventListener('mousedown', e => { e.preventDefault(); rellenarCliente(c); });
+    item.addEventListener('mouseover', () => item.style.background = '#f0f4ff');
+    item.addEventListener('mouseout',  () => item.style.background = '');
+    clienteDropdown.appendChild(item);
+  });
+  clienteDropdown.style.display = 'block';
+}
+
+let buscarTimer;
+avisoInput.addEventListener('input', () => {
+  clearTimeout(buscarTimer);
+  const v = avisoInput.value.trim();
+  if (v.length < 2) { clienteDropdown.style.display = 'none'; return; }
+  avisoSpin.style.display = 'inline';
+  buscarTimer = setTimeout(async () => {
+    try {
+      const resp = await fetch(`${SERVIDOR_URL}/api/buscar-cliente?nombre=${encodeURIComponent(v)}`,
+        { signal: AbortSignal.timeout(8000) });
+      const data = await resp.json();
+      mostrarDropdown(data.clientes || []);
+    } catch (e) {
+      showToast('⚠️ Error al buscar cliente');
+    } finally {
+      avisoSpin.style.display = 'none';
+    }
+  }, 400);
+});
+
+// Cerrar dropdown al hacer clic fuera
+document.addEventListener('click', e => {
+  if (!avisoInput.contains(e.target) && !clienteDropdown.contains(e.target)) {
+    clienteDropdown.style.display = 'none';
+  }
+});
+
+// ── Estado del escáner ─────────────────────────────────────
+let activeInput = null, activeDescInput = null;
+let scanning = false, stream = null;
+
+const overlay   = document.getElementById('scan-overlay');
+const video     = document.getElementById('scan-video');
+const statusEl  = document.getElementById('scan-status');
+const labelEl   = document.getElementById('scan-label');
+const cancelBtn = document.getElementById('scan-cancel');
+const matrows   = document.getElementById('matrows');
+const matData   = [];
+
+// ── Búsqueda de producto en Stel Order ────────────────────
+async function buscarProducto(barcode, descInput, refInput) {
+  if (!barcode || !descInput) return;
+  const prev = descInput.value;
+  descInput.classList.add('buscando');
+  descInput.placeholder = '⏳ Buscando...';
+
+  try {
+    const resp = await fetch(
+      `${SERVIDOR_URL}/api/producto?barcode=${encodeURIComponent(barcode)}`,
+      { signal: AbortSignal.timeout(8000) }
+    );
+    if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
+    const data = await resp.json();
+    descInput.classList.remove('buscando');
+
+    if (data.found && data.nombre) {
+      descInput.value = data.nombre;
+      // Actualizar REF con la referencia interna del producto (no el código de barras)
+      if (refInput && data.referencia) {
+        refInput.value = data.referencia;
+      }
+      descInput.classList.add('encontrado');
+      setTimeout(() => descInput.classList.remove('encontrado'), 2000);
+      showToast('✅ Producto encontrado');
+    } else {
+      descInput.placeholder = '— no encontrado —';
+      descInput.classList.add('no-enc');
+      setTimeout(() => { descInput.classList.remove('no-enc'); descInput.placeholder = ''; }, 3000);
+    }
+  } catch (e) {
+    descInput.classList.remove('buscando');
+    descInput.classList.add('no-enc');
+    const sinConexion = e.message.includes('fetch') || e.message.includes('Network') || e.name === 'TimeoutError';
+    descInput.placeholder = sinConexion ? '— servidor no disponible —' : '— error al buscar —';
+    setTimeout(() => {
+      descInput.classList.remove('no-enc');
+      descInput.placeholder = '';
+      if (!descInput.value) descInput.value = prev;
+    }, 3000);
+  }
+}
+
+// ── Crear filas de material ────────────────────────────────
+function addMaterialRow() {
+  const r = document.createElement('div');
+  r.className = 'mat-r';
+
+  // Botón escanear REF
+  const btnRefCell = document.createElement('div');
+  btnRefCell.className = 'cell';
+  const btnRef = document.createElement('button');
+  btnRef.className = 'scan-btn';
+  btnRef.title = 'Escanear referencia';
+  btnRef.innerHTML = '<i class="ti ti-scan"></i>';
+  btnRefCell.appendChild(btnRef);
+  r.appendChild(btnRefCell);
+
+  // Campo REF
+  const refCell = document.createElement('div');
+  refCell.className = 'cell';
+  const refInput = document.createElement('input');
+  refInput.className = 'f';
+  refInput.type = 'text';
+  refInput.placeholder = 'REF';
+  refCell.appendChild(refInput);
+  r.appendChild(refCell);
+
+  // Campo DESCRIPCIÓN
+  const descCell = document.createElement('div');
+  descCell.className = 'cell';
+  const descInput = document.createElement('input');
+  descInput.className = 'f';
+  descInput.type = 'text';
+  descCell.appendChild(descInput);
+  r.appendChild(descCell);
+
+  // Botón escanear SERIE
+  const btnSerieCell = document.createElement('div');
+  btnSerieCell.className = 'cell';
+  const btnSerie = document.createElement('button');
+  btnSerie.className = 'scan-btn';
+  btnSerie.title = 'Escanear nº de serie';
+  btnSerie.innerHTML = '<i class="ti ti-scan"></i>';
+  btnSerieCell.appendChild(btnSerie);
+  r.appendChild(btnSerieCell);
+
+  // Campo SERIE
+  const serieCell = document.createElement('div');
+  serieCell.className = 'cell';
+  const serieInput = document.createElement('input');
+  serieInput.className = 'f';
+  serieInput.type = 'text';
+  serieInput.placeholder = 'S/N';
+  serieCell.appendChild(serieInput);
+  r.appendChild(serieCell);
+
+  // Campos IP, UBICACIÓN, CABLE
+  const ipInput    = document.createElement('input');
+  const ubicInput  = document.createElement('input');
+  const cableInput = document.createElement('input');
+  [ipInput, ubicInput, cableInput].forEach(inp => { inp.className = 'f'; inp.type = 'text'; });
+
+  [ipInput, ubicInput, cableInput].forEach(inp => {
+    const c = document.createElement('div');
+    c.className = 'cell';
+    c.appendChild(inp);
+    r.appendChild(c);
+  });
+
+  matrows.appendChild(r);
+  const rowData = { ref: refInput, desc: descInput, serie: serieInput, ipcam: ipInput, ubic: ubicInput, cable: cableInput };
+  matData.push(rowData);
+
+  // Escáner botón REF → abre cámara y busca descripción al detectar
+  btnRef.addEventListener('click', () => openScanner(refInput, descInput, 'REFERENCIA'));
+
+  // Escáner botón SERIE → solo rellena serie, sin buscar descripción
+  btnSerie.addEventListener('click', () => openScanner(serieInput, null, 'Nº DE SERIE'));
+
+  // Pistola – Enter = búsqueda inmediata
+  refInput.addEventListener('keydown', e => {
+    if (e.key === 'Enter') { e.preventDefault(); buscarProducto(refInput.value.trim(), descInput, refInput); }
+  });
+
+  // Pistola – debounce (si no envía Enter)
+  let debTimer;
+  refInput.addEventListener('input', () => {
+    clearTimeout(debTimer);
+    const v = refInput.value.trim();
+    if (v.length >= 6) debTimer = setTimeout(() => buscarProducto(v, descInput, refInput), 600);
+  });
+
+  // Auto-añadir fila cuando se empieza a rellenar la última fila
+  [refInput, descInput, serieInput, ipInput, ubicInput, cableInput].forEach(inp => {
+    inp.addEventListener('input', () => {
+      const esUltima = matData[matData.length - 1] === rowData;
+      if (esUltima && inp.value.trim()) addMaterialRow();
+    });
+  });
+}
+
+// Crear las primeras 6 filas al cargar
+for (let i = 0; i < 6; i++) addMaterialRow();
+
+// ── Escáner de cámara ─────────────────────────────────────
+function openScanner(refInput, descInput, campo) {
+  activeInput     = refInput;
+  activeDescInput = descInput;
+  labelEl.textContent = `Escaneando: ${campo}`;
+  overlay.classList.add('active');
+  statusEl.textContent = 'Iniciando cámara...';
+
+  navigator.mediaDevices.getUserMedia({ video: { facingMode: 'environment' }, audio: false })
+    .then(s => {
+      stream = s;
+      video.srcObject = s;
+      video.play();
+      statusEl.textContent = 'Apunta al código de barras';
+      startQuagga();
+    })
+    .catch(() => { statusEl.textContent = 'No se pudo acceder a la cámara.'; });
+}
+
+function startQuagga() {
+  if (!window.Quagga) return;
+  Quagga.init({
+    inputStream: { type: 'LiveStream', target: video, constraints: { facingMode: 'environment' } },
+    decoder: { readers: ['code_128_reader', 'ean_reader', 'ean_8_reader', 'code_39_reader', 'upc_reader'] }
+  }, err => {
+    if (err) { statusEl.textContent = 'Error al iniciar el escáner.'; return; }
+    Quagga.start();
+    scanning = true;
+  });
+
+  Quagga.onDetected(data => {
+    const code = data.codeResult.code;
+    if (code && activeInput) {
+      activeInput.value = code;
+      const desc = activeDescInput;
+      closeScanner();
+      if (desc) buscarProducto(code, desc, activeInput);
+    }
+  });
+}
+
+function closeScanner() {
+  if (scanning) { Quagga.stop(); scanning = false; }
+  if (stream)   { stream.getTracks().forEach(t => t.stop()); stream = null; }
+  overlay.classList.remove('active');
+  activeInput = null;
+  activeDescInput = null;
+}
+
+cancelBtn.addEventListener('click', closeScanner);
+
+// ── Utilidades ────────────────────────────────────────────
+function g(id) { const el = document.getElementById(id); return el ? el.value.trim() : ''; }
+
+function showToast(msg, duracion = 3000) {
+  const t = document.getElementById('toast');
+  t.textContent = msg;
+  t.style.display = 'block';
+  setTimeout(() => t.style.display = 'none', duracion);
+}
+
+function getMaterial() {
+  return matData
+    .filter(row => row.ref.value || row.desc.value || row.serie.value)
+    .map(row => ({
+      ref:   row.ref.value,
+      desc:  row.desc.value,
+      serie: row.serie.value,
+      ip:    row.ipcam.value,
+      ubic:  row.ubic.value,
+      cable: row.cable.value,
+    }));
+}
+
+// ── Botón: Descargar Excel ────────────────────────────────
+document.getElementById('btn-excel').addEventListener('click', () => {
+  if (!window.XLSX) { showToast('Cargando librería, espera...'); return; }
+
+  const filas = [
+    ['FICHA INSTALACIÓN CCTV / SEGURIDAD — SETEL Seguridad'],
+    [],
+    ['AVISO Nº', g('aviso'), 'Nº CONTRATO', g('contrato'), 'Nº CLIENTE', g('cliente'), 'FECHA', g('fecha')],
+    ['NOMBRE COMERCIAL', g('nomcom')],
+    ['NOMBRE', g('nombre')],
+    ['DIRECCIÓN', g('dir'), 'POBLACIÓN', g('pobl'), 'C.P.', g('cp')],
+    ['CONTACTO', g('contacto'), 'TLFNO', g('tlfno'), 'E-MAIL', g('email')],
+    ['MANTENIMIENTO', g('mant'), 'VÍA PÚBLICA', g('via'), 'VIDEO VERI', g('video'), 'TÉCNICO', g('tecnico')],
+    [],
+    ['MATERIAL INSTALADO'],
+    ['REFERENCIA', 'DESCRIPCIÓN', 'Nº SERIE', 'IP CÁMARA', 'UBICACIÓN', 'CABLE/CANAL'],
+  ];
+
+  getMaterial().forEach(m => filas.push([m.ref, m.desc, m.serie, m.ip, m.ubic, m.cable]));
+
+  filas.push(
+    [], ['CONFIGURACIÓN DEL SISTEMA'],
+    ['DOMINIO', g('dom'), 'IP', g('ip'), 'CÁMARAS IP', g('camip')],
+    ['PUERTO', g('puerto'), 'PUERTO WEB', g('puertow'), 'P2P', g('p2p')],
+    ['DÍAS GRABADOS', g('dias'), 'ADMIN', g('adm'), 'USER', g('usr')],
+    ['CLAVE ADMIN', g('adm1')],
+    [], ['OBSERVACIONES', g('obs')]
+  );
+
+  const ws = XLSX.utils.aoa_to_sheet(filas);
+  const wb = XLSX.utils.book_new();
+  XLSX.utils.book_append_sheet(wb, ws, 'Ficha');
+
+  const nombre   = (g('tecnico') || 'tecnico').replace(/\s+/g, '_');
+  const contrato = (g('contrato') || 'SC').replace(/\s+/g, '_');
+  const fecha    = g('fecha') || new Date().toISOString().slice(0, 10);
+  XLSX.writeFile(wb, `FICHA_${nombre}_${contrato}_${fecha}.xlsx`);
+
+  showToast('✅ Excel descargado');
+});
+
+// ── Botón: Enviar a Stel Order ────────────────────────────
+document.getElementById('btn-stel').addEventListener('click', async () => {
+  const material = getMaterial();
+  if (!material.length) {
+    showToast('⚠️ Añade al menos una línea de material');
+    return;
+  }
+
+  const payload = {
+    aviso:     g('aviso'),
+    contrato:  g('contrato'),
+    cliente:   g('cliente'),
+    nomcom:    g('nomcom') || g('nombre'),
+    fecha:     g('fecha'),
+    tecnico:   g('tecnico'),
+    direccion: g('dir'),
+    poblacion: g('pobl'),
+    cp:        g('cp'),
+    contacto:  g('contacto'),
+    tlfno:     g('tlfno'),
+    email:     g('email'),
+    mant:      g('mant'),
+    obs:       g('obs'),
+    material:  material,
+  };
+
+  const btn = document.getElementById('btn-stel');
+  btn.textContent = '⏳ Enviando...';
+  btn.disabled = true;
+
+  try {
+    const resp = await fetch(`${SERVIDOR_URL}/api/enviar-parte`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload),
+      signal: AbortSignal.timeout(15000),
+    });
+
+    const data = await resp.json();
+
+    if (resp.ok && data.ok) {
+      showToast(`✅ Parte creado en Stel Order${data.id ? ' #' + data.id : ''}`, 5000);
+    } else {
+      showToast('⚠️ ' + (data.error || 'Error al enviar'), 5000);
+    }
+  } catch (e) {
+    const sinConexion = e.message.includes('fetch') || e.message.includes('Network') || e.name === 'TimeoutError';
+    showToast(sinConexion ? '⚠️ Servidor no disponible (¿está corriendo?)' : '⚠️ Error: ' + e.message, 5000);
+  } finally {
+    btn.innerHTML = '<i class="ti ti-cloud-upload"></i> Enviar a Stel Order';
+    btn.disabled = false;
+  }
+});
+</script>
+</body>
+</html>
