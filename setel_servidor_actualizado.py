@@ -125,8 +125,9 @@ def buscar_producto():
 
         if items:
             p = items[0]
-            nombre = p.get("name") or p.get("description") or p.get("reference") or ""
-            return jsonify({"found": True, "nombre": nombre, "producto": p})
+            nombre    = p.get("name") or p.get("description") or ""
+            referencia = p.get("reference") or p.get("barcode") or barcode
+            return jsonify({"found": True, "nombre": nombre, "referencia": referencia, "producto": p})
 
         return jsonify({"found": False})
 
