@@ -1,0 +1,520 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Revisión de Partes – SETEL Seguridad</title>
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@tabler/icons-webfont@2.44.0/tabler-icons.min.css">
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=Barlow:wght@400;600;700&display=swap');
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+  body { font-family: 'Barlow', sans-serif; font-size: 13px; background: #f0f2f5; }
+
+  /* ── Layout ── */
+  .app { display: grid; grid-template-columns: 300px 1fr; min-height: 100vh; }
+  @media (max-width: 700px) { .app { grid-template-columns: 1fr; } }
+
+  /* ── Cabecera ── */
+  .top-bar {
+    grid-column: 1 / -1;
+    background: #1a3a6b;
+    color: #fff;
+    padding: 10px 18px;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+  }
+  .top-bar h1 { font-size: 15px; font-weight: 700; }
+  .top-bar .sub { font-size: 11px; opacity: .75; }
+  .top-bar a { color: #f5a623; text-decoration: none; font-size: 12px; }
+  .top-bar a:hover { text-decoration: underline; }
+
+  /* ── Sidebar lista ── */
+  .sidebar {
+    background: #fff;
+    border-right: 1px solid #ddd;
+    overflow-y: auto;
+    max-height: calc(100vh - 52px);
+  }
+  .sidebar-hdr {
+    background: #f5a623;
+    color: #412402;
+    padding: 8px 12px;
+    font-size: 11px;
+    font-weight: 700;
+    letter-spacing: .3px;
+    text-transform: uppercase;
+    position: sticky; top: 0; z-index: 1;
+  }
+  .parte-item {
+    padding: 10px 12px;
+    border-bottom: 1px solid #eee;
+    cursor: pointer;
+    transition: background .1s;
+  }
+  .parte-item:hover { background: #f8f9fb; }
+  .parte-item.active { background: #e8f0fe; border-left: 3px solid #1a3a6b; }
+  .parte-item.aprobado { opacity: .5; }
+  .pi-ref { font-weight: 700; font-size: 13px; color: #1a3a6b; }
+  .pi-meta { font-size: 11px; color: #888; margin-top: 2px; }
+  .pi-badges { display: flex; gap: 5px; margin-top: 4px; flex-wrap: wrap; }
+  .badge {
+    font-size: 10px; font-weight: 700; padding: 2px 7px;
+    border-radius: 8px; white-space: nowrap;
+  }
+  .badge-pend   { background: #fff3cd; color: #856404; }
+  .badge-aprov  { background: #d4edda; color: #155724; }
+  .badge-n      { background: #e8f0fe; color: #1a3a6b; }
+
+  /* ── Panel principal ── */
+  .main {
+    padding: 16px;
+    overflow-y: auto;
+    max-height: calc(100vh - 52px);
+  }
+  .empty-state {
+    display: flex; flex-direction: column; align-items: center;
+    justify-content: center; height: 60vh; color: #aaa; gap: 8px;
+  }
+  .empty-state i { font-size: 48px; }
+  .empty-state p { font-size: 14px; }
+
+  /* ── Tarjeta de parte ── */
+  .parte-card {
+    background: #fff;
+    border: 1px solid #ddd;
+    border-radius: 8px;
+    overflow: hidden;
+    margin-bottom: 12px;
+  }
+  .parte-card-hdr {
+    background: #1a3a6b;
+    color: #fff;
+    padding: 10px 14px;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    flex-wrap: wrap;
+    gap: 6px;
+  }
+  .parte-card-hdr h2 { font-size: 14px; }
+  .parte-card-hdr .meta { font-size: 11px; opacity: .8; }
+  .card-body { padding: 12px 14px; }
+
+  /* ── Datos cliente ── */
+  .info-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(180px, 1fr));
+    gap: 6px;
+    margin-bottom: 12px;
+  }
+  .info-field { border: 1px solid #eee; border-radius: 4px; padding: 5px 8px; }
+  .info-lbl { font-size: 9px; color: #888; font-weight: 700; text-transform: uppercase; }
+  .info-val { font-size: 12px; font-weight: 600; color: #222; }
+
+  /* ── Tabla comparativa ── */
+  .comp-table { width: 100%; border-collapse: collapse; font-size: 12px; margin-bottom: 12px; }
+  .comp-table thead th {
+    background: #f5a623; color: #412402;
+    padding: 6px 8px; text-align: left; font-size: 11px; font-weight: 700;
+    position: sticky; top: 0;
+  }
+  .comp-table tbody td { border: 1px solid #eee; padding: 5px 8px; }
+  .comp-table tbody tr:hover { background: #f8f9fb; }
+  .row-ok       { background: #fff !important; }
+  .row-devuelto { background: #fdf2f2 !important; }
+  .row-furgoneta{ background: #e8f0fe !important; }
+  .row-extra    { background: #fffde7 !important; }
+  .row-noinst   { background: #fdf2f2 !important; }
+
+  .est-badge {
+    font-size: 10px; font-weight: 700; padding: 2px 7px;
+    border-radius: 8px; white-space: nowrap;
+  }
+  .est-ok        { background: #d4edda; color: #155724; }
+  .est-devuelto  { background: #f8d7da; color: #721c24; }
+  .est-furgoneta { background: #cce5ff; color: #004085; }
+  .est-extra     { background: #fff3cd; color: #856404; }
+  .est-noinst    { background: #f8d7da; color: #721c24; }
+
+  /* ── Resumen ── */
+  .resumen {
+    display: flex; gap: 8px; flex-wrap: wrap;
+    padding: 10px 14px;
+    background: #f8f9fb;
+    border-top: 1px solid #eee;
+    border-bottom: 1px solid #eee;
+    margin-bottom: 12px;
+  }
+  .res-item {
+    padding: 4px 12px;
+    border-radius: 10px;
+    font-size: 12px;
+    font-weight: 700;
+  }
+
+  /* ── Notas y botón aprobar ── */
+  .notas-area {
+    width: 100%; min-height: 70px;
+    border: 1px solid #ddd; border-radius: 6px;
+    padding: 8px; font-size: 13px;
+    font-family: 'Barlow', sans-serif;
+    resize: vertical; margin-bottom: 10px;
+  }
+  .notas-area:focus { outline: 2px solid #1a3a6b; }
+
+  .btn-aprobar {
+    background: #1d6f42; color: #fff;
+    border: none; border-radius: 6px;
+    padding: 12px 28px; font-size: 14px; font-weight: 700;
+    cursor: pointer; font-family: 'Barlow', sans-serif;
+    display: flex; align-items: center; gap: 8px;
+  }
+  .btn-aprobar:hover { background: #155533; }
+  .btn-aprobar:disabled { background: #aaa; cursor: default; }
+  .btn-descarga {
+    background: #1a3a6b; color: #fff;
+    border: none; border-radius: 6px;
+    padding: 10px 20px; font-size: 13px; font-weight: 700;
+    cursor: pointer; font-family: 'Barlow', sans-serif;
+    display: flex; align-items: center; gap: 6px;
+    text-decoration: none;
+  }
+  .btn-descarga:hover { background: #f5a623; color: #412402; }
+  .btns-row { display: flex; gap: 10px; align-items: center; flex-wrap: wrap; }
+
+  .ya-aprobado {
+    background: #d4edda; color: #155724;
+    padding: 10px 16px; border-radius: 6px;
+    font-weight: 700; font-size: 14px;
+    border: 1px solid #b8dac5;
+  }
+
+  /* ── Toast ── */
+  #toast {
+    display: none; position: fixed; bottom: 24px; left: 50%;
+    transform: translateX(-50%);
+    background: #1a3a6b; color: #fff;
+    padding: 10px 22px; border-radius: 8px;
+    font-size: 13px; z-index: 2000; white-space: nowrap;
+    box-shadow: 0 4px 12px rgba(0,0,0,.25);
+  }
+  #spinner {
+    display: none; position: fixed; inset: 0;
+    background: rgba(0,0,0,.4); z-index: 3000;
+    align-items: center; justify-content: center;
+    font-size: 22px; color: #fff; flex-direction: column; gap: 12px;
+  }
+  #spinner.active { display: flex; }
+
+  @media print {
+    .sidebar, .top-bar, .btn-aprobar, .btns-row, .notas-area, label { display: none !important; }
+    .app { display: block; }
+    .main { max-height: none; padding: 0; }
+    .parte-card { border: none; }
+  }
+</style>
+</head>
+<body>
+
+<div id="spinner"><i class="ti ti-loader" style="font-size:36px;animation:spin 1s linear infinite;"></i><span>Procesando...</span></div>
+<div id="toast"></div>
+
+<style>@keyframes spin { to { transform: rotate(360deg); } }</style>
+
+<div class="app">
+
+  <!-- Cabecera -->
+  <div class="top-bar">
+    <div>
+      <div style="font-size:11px;opacity:.7;margin-bottom:2px;">Técnicos de Servicios Múltiples S.L.</div>
+      <h1><i class="ti ti-clipboard-check"></i> Revisión de Partes — SETEL Seguridad</h1>
+    </div>
+    <div style="display:flex;gap:12px;align-items:center;">
+      <a href="/ficha">🗒 Ficha técnico</a>
+      <a href="/almacen">📦 Almacén</a>
+      <button onclick="cargarLista()" style="background:#f5a623;color:#412402;border:none;border-radius:4px;padding:5px 10px;cursor:pointer;font-size:12px;font-weight:700;">↺ Actualizar</button>
+    </div>
+  </div>
+
+  <!-- Sidebar -->
+  <div class="sidebar">
+    <div class="sidebar-hdr">Partes enviados</div>
+    <div id="lista-partes"><div style="padding:16px;color:#aaa;font-size:12px;">Cargando...</div></div>
+  </div>
+
+  <!-- Panel principal -->
+  <div class="main">
+    <div class="empty-state" id="empty-state">
+      <i class="ti ti-clipboard-list"></i>
+      <p>Selecciona un parte de la lista para revisar</p>
+    </div>
+    <div id="detalle-wrap" style="display:none;"></div>
+  </div>
+
+</div>
+
+<script>
+'use strict';
+
+const SERVIDOR_URL = (window.location.hostname === 'localhost' ||
+                      window.location.hostname === '127.0.0.1' ||
+                      window.location.hostname.match(/^10\.|^192\.168\.|^172\./))
+  ? `http://${window.location.host}`
+  : window.location.origin;
+
+let parteActual = null;
+
+function showToast(msg, ms = 3000) {
+  const t = document.getElementById('toast');
+  t.textContent = msg;
+  t.style.display = 'block';
+  setTimeout(() => t.style.display = 'none', ms);
+}
+function spinner(show) {
+  document.getElementById('spinner').classList.toggle('active', show);
+}
+
+// ── Lista de partes ──────────────────────────────────────
+async function cargarLista() {
+  try {
+    const r = await fetch(`${SERVIDOR_URL}/api/partes-pendientes`);
+    const data = await r.json();
+    const lista = document.getElementById('lista-partes');
+    if (!data.partes || !data.partes.length) {
+      lista.innerHTML = '<div style="padding:16px;color:#aaa;font-size:12px;">Sin partes aún.<br>Los partes aparecen aquí cuando el técnico envía la ficha.</div>';
+      return;
+    }
+    lista.innerHTML = '';
+    for (const p of data.partes) {
+      const el = document.createElement('div');
+      el.className = 'parte-item' + (p.estado === 'aprobado' ? ' aprobado' : '');
+      el.dataset.ref = p.referencia;
+      el.innerHTML = `
+        <div class="pi-ref">${p.referencia}</div>
+        <div class="pi-meta">${p.fecha_corta} · ${p.tecnico || '—'}</div>
+        <div class="pi-meta" style="font-weight:600;">${p.nomcom || '—'}</div>
+        <div class="pi-badges">
+          <span class="badge ${p.estado === 'aprobado' ? 'badge-aprov' : 'badge-pend'}">${p.estado === 'aprobado' ? '✅ Aprobado' : '⏳ Pendiente'}</span>
+          ${p.presupuesto ? `<span class="badge badge-n">${p.presupuesto}</span>` : ''}
+          ${p.sal_ref ? `<span class="badge badge-n">${p.sal_ref}</span>` : ''}
+          <span class="badge badge-n">${p.n_items} items</span>
+        </div>`;
+      el.addEventListener('click', () => abrirParte(p.referencia, el));
+      lista.appendChild(el);
+    }
+  } catch(e) {
+    document.getElementById('lista-partes').innerHTML = '<div style="padding:16px;color:#c0392b;font-size:12px;">Error al cargar partes</div>';
+  }
+}
+
+// ── Abrir un parte ───────────────────────────────────────
+async function abrirParte(ref, itemEl) {
+  // Marcar activo
+  document.querySelectorAll('.parte-item').forEach(el => el.classList.remove('active'));
+  if (itemEl) itemEl.classList.add('active');
+  document.getElementById('empty-state').style.display = 'none';
+  document.getElementById('detalle-wrap').style.display = 'block';
+  document.getElementById('detalle-wrap').innerHTML = '<div style="padding:24px;color:#aaa;">Cargando parte...</div>';
+  spinner(true);
+  try {
+    const r = await fetch(`${SERVIDOR_URL}/api/parte/${encodeURIComponent(ref)}`);
+    const data = await r.json();
+    if (!data.found) { showToast('⚠️ Parte no encontrado'); return; }
+    parteActual = data.parte;
+    renderDetalle(data.parte);
+  } catch(e) {
+    showToast('⚠️ Error al cargar el parte');
+  } finally {
+    spinner(false);
+  }
+}
+
+// ── Renderizar detalle ───────────────────────────────────
+function renderDetalle(p) {
+  const material   = p.material || [];
+  const lineas_p   = p.lineas_presupuesto || [];
+  const aprobado   = p.estado === 'aprobado';
+
+  // Índice presupuesto por item-id y por ref
+  const presIdx = {};
+  for (const l of lineas_p) {
+    const key = String(l['item-id'] || l.ref || '').toUpperCase();
+    if (key) presIdx[key] = l;
+  }
+
+  // Construir filas de comparación
+  const instRefs = new Set();
+  let filas = '';
+  let nOk = 0, nDev = 0, nFurg = 0, nExtra = 0;
+
+  for (const m of material) {
+    if (!m.ref && !m.desc) continue;
+    const key = String(m['item-id'] || m.ref || '').toUpperCase();
+    const pline = presIdx[key];
+    const devuelto  = m.devuelto  || false;
+    const furgoneta = m.furgoneta || false;
+    if (key) instRefs.add(key);
+
+    let rowCls, badgeCls, badgeTxt, presTxt;
+    if (devuelto) {
+      rowCls = 'row-devuelto'; badgeCls = 'est-devuelto'; badgeTxt = '↩ DEVUELTO';
+      nDev++;
+    } else if (furgoneta) {
+      rowCls = 'row-furgoneta'; badgeCls = 'est-furgoneta'; badgeTxt = '🚐 FURGONETA';
+      nFurg++;
+    } else if (pline) {
+      rowCls = 'row-ok'; badgeCls = 'est-ok'; badgeTxt = '✅ OK';
+      nOk++;
+    } else {
+      rowCls = 'row-extra'; badgeCls = 'est-extra'; badgeTxt = '➕ EXTRA';
+      nExtra++;
+    }
+    presTxt = pline ? `×${pline.cantidad || 1}` : '—';
+
+    filas += `<tr class="${rowCls}">
+      <td>${m.ref || ''}</td>
+      <td>${m.desc || ''}</td>
+      <td style="text-align:center">${presTxt}</td>
+      <td>${m.serie || ''}</td>
+      <td>${m.ip || ''}</td>
+      <td>${m.ubic || ''}</td>
+      <td style="text-align:center"><span class="est-badge ${badgeCls}">${badgeTxt}</span></td>
+    </tr>`;
+  }
+
+  // Presupuestados no instalados
+  let nNoInst = 0;
+  for (const l of lineas_p) {
+    const key = String(l['item-id'] || l.ref || '').toUpperCase();
+    if (key && !instRefs.has(key)) {
+      nNoInst++;
+      filas += `<tr class="row-noinst">
+        <td>${l.ref || ''}</td>
+        <td>${l.nombre || ''}</td>
+        <td style="text-align:center">×${l.cantidad || 1}</td>
+        <td></td><td></td><td></td>
+        <td style="text-align:center"><span class="est-badge est-noinst">❌ NO INST.</span></td>
+      </tr>`;
+    }
+  }
+
+  // Resumen badges
+  let resHTML = `<span class="res-item" style="background:#d4edda;color:#155724;">✅ Instalados: ${nOk}</span>`;
+  if (nDev)    resHTML += `<span class="res-item" style="background:#f8d7da;color:#721c24;">↩ Devueltos: ${nDev}</span>`;
+  if (nFurg)   resHTML += `<span class="res-item" style="background:#cce5ff;color:#004085;">🚐 Furgoneta: ${nFurg}</span>`;
+  if (nExtra)  resHTML += `<span class="res-item" style="background:#fff3cd;color:#856404;">➕ Extra: ${nExtra}</span>`;
+  if (nNoInst) resHTML += `<span class="res-item" style="background:#f8d7da;color:#721c24;">❌ No instalados: ${nNoInst}</span>`;
+  if (lineas_p.length) resHTML += `<span class="res-item" style="background:#e8f0fe;color:#1a3a6b;">📋 Presupuestados: ${lineas_p.length}</span>`;
+
+  // Zona de aprobación
+  let aprobZona = '';
+  if (aprobado) {
+    const fechaAp = p.fecha_aprobacion ? new Date(p.fecha_aprobacion).toLocaleString('es-ES') : '';
+    aprobZona = `<div class="ya-aprobado">✅ Aprobado el ${fechaAp}</div>
+      ${p.notas_revision ? `<div style="margin-top:8px;padding:8px 12px;background:#fffde7;border:1px solid #f5a623;border-radius:4px;font-size:12px;">📝 ${p.notas_revision}</div>` : ''}
+      <div class="btns-row" style="margin-top:10px;">
+        ${p.pdf_libro ? `<a class="btn-descarga" href="${SERVIDOR_URL}/api/descargar-libro/${p.referencia}" target="_blank"><i class="ti ti-file-text"></i> Descargar libro PDF</a>` : '<span style="color:#888;font-size:12px;">PDF no disponible (WeasyPrint no instalado)</span>'}
+      </div>`;
+  } else {
+    aprobZona = `
+      <div style="margin-bottom:6px;font-size:12px;color:#555;font-weight:600;">Notas de revisión (opcional):</div>
+      <textarea id="notas-revision" class="notas-area" placeholder="Añade observaciones si es necesario antes de aprobar..."></textarea>
+      <div class="btns-row">
+        <button class="btn-aprobar" id="btn-aprobar" onclick="aprobarParte('${p.referencia}')">
+          <i class="ti ti-check"></i> Aprobar y generar libro
+        </button>
+        ${nNoInst > 0 ? `<span style="color:#c0392b;font-size:12px;font-weight:600;">⚠️ Hay ${nNoInst} elemento(s) presupuestados sin instalar</span>` : ''}
+      </div>`;
+  }
+
+  document.getElementById('detalle-wrap').innerHTML = `
+    <div class="parte-card">
+      <div class="parte-card-hdr">
+        <div>
+          <h2>${p.referencia} ${aprobado ? '<span style="background:#d4edda;color:#155724;font-size:11px;padding:2px 7px;border-radius:8px;font-weight:700;">APROBADO</span>' : '<span style="background:#fff3cd;color:#856404;font-size:11px;padding:2px 7px;border-radius:8px;font-weight:700;">PENDIENTE</span>'}</h2>
+          <div class="meta">Stel Order: ${p.wo_ref || '—'} · SAL: ${p.sal_ref || '—'} · Presupuesto: ${p.presupuesto || '—'}</div>
+        </div>
+        <div class="meta" style="text-align:right;">
+          Técnico: <strong>${p.tecnico || '—'}</strong><br>
+          ${new Date(p.fecha).toLocaleString('es-ES')}
+        </div>
+      </div>
+      <div class="card-body">
+        <div class="info-grid">
+          <div class="info-field"><div class="info-lbl">Cliente</div><div class="info-val">${p.nomcom || '—'}</div></div>
+          <div class="info-field"><div class="info-lbl">Dirección</div><div class="info-val">${p.direccion || '—'}</div></div>
+          <div class="info-field"><div class="info-lbl">Población</div><div class="info-val">${p.poblacion || '—'}</div></div>
+          <div class="info-field"><div class="info-lbl">Teléfono</div><div class="info-val">${p.tlfno || '—'}</div></div>
+          <div class="info-field"><div class="info-lbl">Clave admin</div><div class="info-val">${p.adm1 || '—'}</div></div>
+          ${p.obs ? `<div class="info-field" style="grid-column:span 2;"><div class="info-lbl">Observaciones</div><div class="info-val" style="font-weight:400;">${p.obs}</div></div>` : ''}
+        </div>
+
+        <div class="resumen">${resHTML}</div>
+
+        <div style="overflow-x:auto;">
+          <table class="comp-table">
+            <thead>
+              <tr>
+                <th>REFERENCIA</th>
+                <th>DESCRIPCIÓN</th>
+                <th style="text-align:center">PRESUP.</th>
+                <th>Nº SERIE</th>
+                <th>IP</th>
+                <th>UBICACIÓN</th>
+                <th style="text-align:center">ESTADO</th>
+              </tr>
+            </thead>
+            <tbody>${filas || '<tr><td colspan="7" style="text-align:center;color:#aaa;padding:16px;">Sin material</td></tr>'}</tbody>
+          </table>
+        </div>
+      </div>
+
+      <div style="padding:14px 14px 8px;border-top:2px solid #f5a623;">
+        ${aprobZona}
+      </div>
+    </div>`;
+}
+
+// ── Aprobar parte ────────────────────────────────────────
+async function aprobarParte(ref) {
+  const notas = document.getElementById('notas-revision')?.value.trim() || '';
+  const btn = document.getElementById('btn-aprobar');
+  btn.disabled = true;
+  btn.innerHTML = '<i class="ti ti-loader"></i> Procesando...';
+  spinner(true);
+  try {
+    const r = await fetch(`${SERVIDOR_URL}/api/aprobar-parte/${encodeURIComponent(ref)}`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ notas }),
+    });
+    const data = await r.json();
+    if (data.ok) {
+      const msg = data.pdf ? '✅ Aprobado · Libro PDF generado' : '✅ Aprobado (WeasyPrint no instalado, sin PDF)';
+      showToast(msg, 5000);
+      // Recargar vista
+      cargarLista();
+      await abrirParte(ref);
+    } else {
+      showToast('⚠️ ' + (data.error || 'Error al aprobar'));
+      btn.disabled = false;
+      btn.innerHTML = '<i class="ti ti-check"></i> Aprobar y generar libro';
+    }
+  } catch(e) {
+    showToast('⚠️ Error: ' + e.message);
+    btn.disabled = false;
+    btn.innerHTML = '<i class="ti ti-check"></i> Aprobar y generar libro';
+  } finally {
+    spinner(false);
+  }
+}
+
+// Cargar al inicio
+cargarLista();
+// Actualizar lista cada 60 segundos
+setInterval(cargarLista, 60000);
+</script>
+</body>
+</html>
