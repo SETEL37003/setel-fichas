@@ -120,11 +120,11 @@
   }
   .mat-table { min-width: 680px; }
 
-  /* Columnas: [btn-scan] [REF] [DESCRIPCIÓN] [scan+SERIE] [SERIE] [IP] [UBICACIÓN] [CABLE] */
+  /* Columnas: [btn-scan] [REF] [DESCRIPCIÓN] [scan+SERIE] [SERIE] [IP] [UBICACIÓN] */
   .mat-hdr,
   .mat-r {
     display: grid;
-    grid-template-columns: 32px 110px 1fr 32px 110px 80px 100px 70px;
+    grid-template-columns: 32px 110px 1fr 32px 110px 80px 1fr;
   }
   /* Inputs dentro de la tabla no desbordan */
   .mat-r .cell input {
@@ -295,6 +295,100 @@
     .row-4col { grid-template-columns: 1fr 1fr !important; }
     .row-3col { grid-template-columns: 1fr 1fr !important; }
   }
+
+  .btn-print {
+    background: #555;
+    color: #fff;
+  }
+  .btn-print:hover { background: #333; }
+
+  /* ── Cards de material (modo SAL) ───────────────────────── */
+  .mat-card {
+    background: #fff;
+    border: 1px solid #ddd;
+    border-radius: 8px;
+    margin-bottom: 10px;
+    overflow: hidden;
+    box-shadow: 0 1px 4px rgba(0,0,0,0.06);
+  }
+  .mat-card-hdr {
+    display: flex;
+    align-items: flex-start;
+    gap: 8px;
+    padding: 9px 12px;
+    background: #f8f9fa;
+    border-bottom: 1px solid #eee;
+  }
+  .mat-card-badge {
+    font-size: 10px;
+    font-weight: 700;
+    padding: 3px 8px;
+    border-radius: 10px;
+    white-space: nowrap;
+    flex-shrink: 0;
+    margin-top: 2px;
+  }
+  .badge-ok        { background: #d4edda; color: #155724; }
+  .badge-dif       { background: #fff3cd; color: #856404; }
+  .badge-devuelto  { background: #f8d7da; color: #721c24; }
+  .badge-furgoneta { background: #cce5ff; color: #004085; }
+  .mat-card-nombre { font-weight: 700; font-size: 13px; line-height: 1.3; }
+  .mat-card-ref    { font-size: 11px; color: #888; margin-top: 1px; }
+  .mat-card-body {
+    padding: 10px 12px;
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 8px 14px;
+  }
+  .mat-card-field { display: flex; flex-direction: column; gap: 2px; }
+  .mat-card-lbl   { font-size: 9px; color: #888; font-weight: 700; text-transform: uppercase; letter-spacing: 0.3px; }
+  .mat-card-inp {
+    font-size: 13px;
+    font-weight: 600;
+    border: none;
+    border-bottom: 1.5px solid #e0e0e0;
+    background: transparent;
+    outline: none;
+    padding: 3px 0;
+    font-family: 'Barlow', sans-serif;
+    color: #1a1a1a;
+    width: 100%;
+  }
+  .mat-card-inp:focus { border-bottom-color: #1a3a6b; background: #fffde7; }
+  .mat-card-full { grid-column: span 2; }
+  .mat-card-actions {
+    display: flex;
+    gap: 6px;
+    padding: 8px 12px;
+    border-top: 1px solid #eee;
+    background: #fafafa;
+  }
+  .btn-card {
+    flex: 1;
+    padding: 8px 6px;
+    border: none;
+    border-radius: 5px;
+    font-size: 12px;
+    font-weight: 600;
+    cursor: pointer;
+    font-family: 'Barlow', sans-serif;
+  }
+  .btn-card-scan { background: #e8f0fe; color: #1a3a6b; }
+  .btn-card-dev  { background: #fdf2f2; color: #c0392b; }
+  .btn-card-dev.active { background: #c0392b; color: #fff; }
+  .mat-card.devuelto .mat-card-body { opacity: 0.5; pointer-events: none; }
+
+  /* ── Impresión ───────────────────────────────────────────── */
+  @media print {
+    * { -webkit-print-color-adjust: exact !important; print-color-adjust: exact !important; }
+    body { background: #fff !important; padding: 0 !important; margin: 0 !important; }
+    #scan-overlay, #toast, .btns-row { display: none !important; }
+    .ficha { border: none !important; max-width: 100% !important; box-shadow: none !important; }
+    .f, textarea { border: none !important; background: transparent !important; }
+    select { appearance: none !important; border: none !important; background: transparent !important; }
+    a { text-decoration: none !important; }
+    @page { margin: 10mm; size: A4 portrait; }
+  }
 </style>
 </head>
 <body>
@@ -334,7 +428,7 @@
       </div>
     </div>
     <div class="cell"><span class="lbl">Nº CONTRATO</span><input class="f" id="contrato" type="text"></div>
-    <div class="cell"><span class="lbl">Nº CLIENTE</span><input class="f" id="cliente" type="text"></div>
+    <div class="cell"><span class="lbl">Nº CLIENTE</span><input class="f" id="cliente" type="text"><input type="hidden" id="id_stel"></div>
     <div class="cell"><span class="lbl">FECHA</span><input class="f" id="fecha" type="date" style="font-size:13px;"></div>
   </div>
 
@@ -400,6 +494,19 @@
     </div>
   </div>
 
+  <!-- ── REFERENCIA SALIDA ALMACÉN ─────────────────────────── -->
+  <div class="row" style="grid-template-columns:180px 1fr;border-left:4px solid #f5a623;background:#fffde7;">
+    <div class="cell">
+      <span class="lbl">SALIDA ALMACÉN</span>
+      <input class="f" id="sal-ref" type="text" placeholder="SAL-250621-001"
+             autocomplete="off" style="font-size:13px;font-weight:700;letter-spacing:0.5px;">
+      <span id="sal-spin" style="display:none;font-size:13px;">⏳</span>
+    </div>
+    <div class="cell" id="sal-status-cell" style="font-size:11px;color:#888;">
+      Introduce la referencia del almacén para cargar el material
+    </div>
+  </div>
+
   <!-- ── MATERIAL INSTALADO ────────────────────────────────── -->
   <div class="sec">MATERIAL INSTALADO</div>
 
@@ -414,19 +521,24 @@
         <div class="cell">Nº SERIE</div>
         <div class="cell">IP</div>
         <div class="cell">UBICACIÓN</div>
-        <div class="cell">CABLE</div>
       </div>
       <!-- Filas dinámicas -->
       <div id="matrows"></div>
     </div>
   </div>
-  <div style="text-align:right;margin-top:4px;">
+  <div id="btn-add-row-wrap" style="text-align:right;margin-top:4px;">
     <button onclick="addMaterialRow()" style="
       background:#1a3a6b;color:#fff;border:none;border-radius:6px;
       padding:8px 18px;font-size:14px;cursor:pointer;">
       ➕ Añadir fila
     </button>
   </div>
+
+  <!-- ── Material en modo SAL (cards) ─────────────────────── -->
+  <div id="sal-cards-section" style="display:none;padding:8px 8px 2px;"></div>
+
+  <!-- ── Resumen comparación con presupuesto ──────────────── -->
+  <div id="comparacion-section" style="display:none;padding:6px 10px;border-top:2px solid #f5a623;background:#fffde7;"></div>
 
   <!-- ── CONFIGURACIÓN DEL SISTEMA ────────────────────────── -->
   <div class="sec">CONFIGURACIÓN DEL SISTEMA</div>
@@ -445,8 +557,9 @@
     <div class="cell"><span class="lbl">ADMIN</span><input class="f" id="adm" type="text"></div>
     <div class="cell"><span class="lbl">USER</span><input class="f" id="usr" type="text"></div>
   </div>
-  <div class="row" style="grid-template-columns:1fr;">
+  <div class="row" style="grid-template-columns:1fr 1fr;">
     <div class="cell"><span class="lbl">CLAVE ADMIN</span><input class="f" id="adm1" type="text"></div>
+    <div class="cell"><span class="lbl">CABLE</span><input class="f" id="cable" type="text"></div>
   </div>
 
   <!-- ── OBSERVACIONES ─────────────────────────────────────── -->
@@ -462,6 +575,9 @@
   <div class="btns-row">
     <button class="btn-accion btn-excel" id="btn-excel">
       <i class="ti ti-file-spreadsheet"></i> Descargar Excel
+    </button>
+    <button class="btn-accion btn-print" id="btn-print">
+      <i class="ti ti-printer"></i> Imprimir / PDF
     </button>
     <button class="btn-accion btn-stel" id="btn-stel">
       <i class="ti ti-cloud-upload"></i> Enviar a Stel Order
@@ -514,14 +630,15 @@ const clienteDropdown = document.getElementById('cliente-dropdown');
 
 function rellenarCliente(c) {
   const set = (id, val) => { const el = document.getElementById(id); if (el && val != null) el.value = val; };
-  set('cliente',  c.id     || '');
-  set('nomcom',   c.nombre || '');
-  set('nombre',   c.nombre || '');
-  set('dir',      c.dir    || '');
-  set('pobl',     c.pobl   || '');
-  set('cp',       c.cp     || '');
-  set('tlfno',    c.tlfno  || '');
-  set('email',    c.email  || '');
+  set('cliente',  c.num_cli || c.id || '');   // número visible del cliente
+  set('id_stel',  c.id      || '');           // ID interno (campo oculto)
+  set('nomcom',   c.nombre  || '');
+  set('nombre',   c.nombre  || '');
+  set('dir',      c.dir     || '');
+  set('pobl',     c.pobl    || '');
+  set('cp',       c.cp      || '');
+  set('tlfno',    c.tlfno   || '');
+  set('email',    c.email   || '');
   avisoInput.value = c.nombre || '';
   clienteDropdown.style.display = 'none';
   showToast('✅ Cliente cargado');
@@ -682,13 +799,12 @@ function addMaterialRow() {
   serieCell.appendChild(serieInput);
   r.appendChild(serieCell);
 
-  // Campos IP, UBICACIÓN, CABLE
-  const ipInput    = document.createElement('input');
-  const ubicInput  = document.createElement('input');
-  const cableInput = document.createElement('input');
-  [ipInput, ubicInput, cableInput].forEach(inp => { inp.className = 'f'; inp.type = 'text'; });
+  // Campos IP, UBICACIÓN
+  const ipInput   = document.createElement('input');
+  const ubicInput = document.createElement('input');
+  [ipInput, ubicInput].forEach(inp => { inp.className = 'f'; inp.type = 'text'; });
 
-  [ipInput, ubicInput, cableInput].forEach(inp => {
+  [ipInput, ubicInput].forEach(inp => {
     const c = document.createElement('div');
     c.className = 'cell';
     c.appendChild(inp);
@@ -696,7 +812,7 @@ function addMaterialRow() {
   });
 
   matrows.appendChild(r);
-  const rowData = { ref: refInput, desc: descInput, serie: serieInput, ipcam: ipInput, ubic: ubicInput, cable: cableInput };
+  const rowData = { ref: refInput, desc: descInput, serie: serieInput, ipcam: ipInput, ubic: ubicInput, cable: { value: '' } };
   matData.push(rowData);
 
   // Escáner botón REF → abre cámara y busca descripción al detectar
@@ -726,7 +842,7 @@ function addMaterialRow() {
       addMaterialRow();
     }
   }
-  [refInput, descInput, serieInput, ipInput, ubicInput, cableInput].forEach(inp => {
+  [refInput, descInput, serieInput, ipInput, ubicInput].forEach(inp => {
     inp.addEventListener('input', checkUltimaFila);
     inp.addEventListener('change', checkUltimaFila);
   });
@@ -801,6 +917,20 @@ function showToast(msg, duracion = 3000) {
 }
 
 function getMaterial() {
+  // Modo SAL: usar las cards
+  if (salCards.length) {
+    return salCards.map(c => ({
+      ref:      c.ref,
+      desc:     c.nombre,
+      serie:    c.serie_input ? c.serie_input.value.trim() : '',
+      ip:       c.ip_input    ? c.ip_input.value.trim()    : '',
+      ubic:     c.ubic_input  ? c.ubic_input.value.trim()  : '',
+      cable:    '',
+      devuelto: c.devuelto,
+      furgoneta: c.es_furgoneta,
+    }));
+  }
+  // Modo tabla normal
   return matData
     .filter(row => row.ref.value || row.desc.value || row.serie.value)
     .map(row => ({
@@ -813,45 +943,452 @@ function getMaterial() {
     }));
 }
 
+// ── MÓDULO SAL: Carga de material desde salida de almacén ─
+let salCards = [];
+let salDataActual = null;
+let presupuestoLineas = [];
+
+const salRefInput    = document.getElementById('sal-ref');
+const salSpin        = document.getElementById('sal-spin');
+const salStatusCell  = document.getElementById('sal-status-cell');
+const salCardsSection= document.getElementById('sal-cards-section');
+const compSection    = document.getElementById('comparacion-section');
+
+// Enter o SAL-YYMMDD-NNN detectado → cargar
+salRefInput.addEventListener('keydown', e => {
+  if (e.key === 'Enter') { e.preventDefault(); cargarSAL(salRefInput.value.trim()); }
+});
+salRefInput.addEventListener('blur', () => {
+  const v = salRefInput.value.trim().toUpperCase();
+  if (/^SAL-\d{6}-\d{3}$/.test(v)) cargarSAL(v);
+});
+
+async function cargarSAL(ref) {
+  if (!ref) return;
+  salSpin.style.display = 'inline';
+  salStatusCell.textContent = '⏳ Cargando...';
+  try {
+    const r = await fetch(`${SERVIDOR_URL}/api/get-salida/${encodeURIComponent(ref)}`,
+      { signal: AbortSignal.timeout(8000) });
+    if (!r.ok) throw new Error('no encontrado');
+    const data = await r.json();
+    const salida = data.salida || data;  // compatibilidad
+    salDataActual = salida;
+
+    // Rellenar técnico si viene en la salida
+    if (salida.tecnico) {
+      const sel = document.getElementById('tecnico');
+      for (const opt of sel.options) {
+        if (opt.value === salida.tecnico) { sel.value = opt.value; break; }
+      }
+    }
+
+    // Cargar presupuesto para comparación
+    presupuestoLineas = [];
+    if (salida.presupuesto) {
+      try {
+        const rp = await fetch(`${SERVIDOR_URL}/api/presupuesto?ref=${encodeURIComponent(salida.presupuesto)}`,
+          { signal: AbortSignal.timeout(8000) });
+        if (rp.ok) {
+          const dp = await rp.json();
+          presupuestoLineas = dp.items || dp.lineas || [];
+          // Rellenar contrato
+          const ctrEl = document.getElementById('contrato');
+          if (!ctrEl.value) ctrEl.value = salida.presupuesto;
+          // Rellenar nombre cliente (el servidor devuelve string, no objeto)
+          if (dp.cliente && !document.getElementById('aviso').value) {
+            document.getElementById('aviso').value = dp.cliente;
+          }
+        }
+      } catch(e) { /* sin presupuesto */ }
+    }
+
+    // items puede llamarse 'items' o 'productos' según versión
+    const productos = salida.items || salida.productos || [];
+    mostrarCards(productos);
+    salStatusCell.innerHTML = `✅ <strong>${ref}</strong> · ${productos.length} productos${salida.presupuesto ? ' · Presup: '+salida.presupuesto : ''}`;
+  } catch(e) {
+    salStatusCell.textContent = `❌ No se encontró ${ref}`;
+    showToast('⚠️ Referencia SAL no encontrada');
+  } finally {
+    salSpin.style.display = 'none';
+  }
+}
+
+function getEstado(card) {
+  if (card.devuelto)     return { label: '↩ DEVUELTO',  cls: 'badge-devuelto' };
+  if (card.es_furgoneta) return { label: '🚐 FURGONETA', cls: 'badge-furgoneta' };
+  const pq = card.presupuesto_qty;
+  if (!pq) return { label: '➕ EXTRA', cls: 'badge-furgoneta' };
+  return { label: `✅ OK · ×${pq}`, cls: 'badge-ok' };
+}
+
+function mostrarCards(productos) {
+  // Ocultar tabla normal y mostrar cards
+  document.querySelector('.mat-wrap').style.display = 'none';
+  document.getElementById('btn-add-row-wrap').style.display = 'none';
+  salCardsSection.style.display = 'block';
+  salCardsSection.innerHTML = '';
+  salCards = [];
+
+  // Mapa presupuesto por item-id
+  const presMap = {};
+  for (const l of presupuestoLineas) {
+    if (l['item-id']) presMap[l['item-id']] = l;
+  }
+
+  for (const p of productos) {
+    const pLine = presMap[p['item-id']] || null;
+    const card = {
+      ref: p.referencia || p.ref || '',
+      nombre: p.nombre || '',
+      item_id: p['item-id'] || null,
+      presupuesto_qty: pLine ? (pLine.units || pLine.cantidad || 0) : 0,
+      devuelto: false,
+      es_furgoneta: false,
+      serie_input: null, ip_input: null,
+      ubic_input: null, coment_input: null,
+      badge_el: null, _div: null,
+    };
+    salCards.push(card);
+    salCardsSection.appendChild(buildCard(card));
+  }
+
+  // Botón añadir desde furgoneta
+  const btnF = document.createElement('button');
+  btnF.id = 'btn-add-furgoneta';
+  btnF.style.cssText = 'width:100%;padding:12px;background:#e8f0fe;color:#1a3a6b;border:2px dashed #1a3a6b;border-radius:8px;font-size:14px;font-weight:600;cursor:pointer;font-family:Barlow,sans-serif;margin-top:2px;';
+  btnF.innerHTML = '🚐 Añadir material de furgoneta';
+  btnF.addEventListener('click', addFurgoneta);
+  salCardsSection.appendChild(btnF);
+
+  actualizarComparacion();
+}
+
+function buildCard(card) {
+  const div = document.createElement('div');
+  div.className = 'mat-card';
+  const e = getEstado(card);
+  div.innerHTML = `
+    <div class="mat-card-hdr">
+      <span class="mat-card-badge ${e.cls}">${e.label}</span>
+      <div style="flex:1;min-width:0;">
+        <div class="mat-card-nombre">${card.nombre || '—'}</div>
+        <div class="mat-card-ref">${card.ref}${card.presupuesto_qty ? ' &nbsp;·&nbsp; Presup: ×'+card.presupuesto_qty : ''}</div>
+      </div>
+    </div>
+    <div class="mat-card-body">
+      <div class="mat-card-field">
+        <span class="mat-card-lbl">Nº SERIE</span>
+        <input type="text" class="mat-card-inp serie-inp" placeholder="Escanear o escribir">
+      </div>
+      <div class="mat-card-field">
+        <span class="mat-card-lbl">IP CÁMARA</span>
+        <input type="text" class="mat-card-inp ip-inp" placeholder="192.168.x.x">
+      </div>
+      <div class="mat-card-field mat-card-full">
+        <span class="mat-card-lbl">UBICACIÓN</span>
+        <input type="text" class="mat-card-inp ubic-inp" placeholder="Ej: Entrada principal, pasillo 2...">
+      </div>
+      <div class="mat-card-field mat-card-full">
+        <span class="mat-card-lbl">COMENTARIO</span>
+        <input type="text" class="mat-card-inp coment-inp" placeholder="Notas adicionales...">
+      </div>
+    </div>
+    <div class="mat-card-actions">
+      <button class="btn-card btn-card-scan">📷 Escanear serie</button>
+      <button class="btn-card btn-card-dev">↩ Devolver al almacén</button>
+    </div>`;
+  card.serie_input  = div.querySelector('.serie-inp');
+  card.ip_input     = div.querySelector('.ip-inp');
+  card.ubic_input   = div.querySelector('.ubic-inp');
+  card.coment_input = div.querySelector('.coment-inp');
+  card.badge_el     = div.querySelector('.mat-card-badge');
+  card._div         = div;
+
+  div.querySelector('.btn-card-scan').addEventListener('click', () =>
+    openScanner(card.serie_input, null, 'Nº DE SERIE — ' + (card.nombre||card.ref)));
+
+  const btnDev = div.querySelector('.btn-card-dev');
+  btnDev.addEventListener('click', () => {
+    card.devuelto = !card.devuelto;
+       btnDev.classList.toggle('active', card.devuelto);
+    div.classList.toggle('devuelto', card.devuelto);
+    refrescarBadge(card);
+    actualizarComparacion();
+  });
+  return div;
+}
+
+function addFurgoneta() {
+  const card = {
+    ref: '', nombre: '', item_id: null, presupuesto_qty: 0,
+    devuelto: false, es_furgoneta: true,
+    serie_input: null, ip_input: null,
+    ubic_input: null, coment_input: null,
+    badge_el: null, _div: null,
+  };
+  salCards.push(card);
+  const div = document.createElement('div');
+  div.className = 'mat-card';
+  div.style.borderColor = '#1a3a6b';
+  div.innerHTML = `
+    <div class="mat-card-hdr" style="background:#e8f0fe;">
+      <span class="mat-card-badge badge-furgoneta">🚐 FURGONETA</span>
+      <input type="text" class="mat-card-inp furg-ref" placeholder="Referencia o nombre del producto"
+             style="flex:1;border-bottom:1.5px solid #aab;font-size:13px;margin-left:8px;">
+    </div>
+    <div class="mat-card-body">
+      <div class="mat-card-field">
+        <span class="mat-card-lbl">Nº SERIE</span>
+        <input type="text" class="mat-card-inp serie-inp" placeholder="Escanear o escribir">
+      </div>
+      <div class="mat-card-field">
+        <span class="mat-card-lbl">IP CÁMARA</span>
+        <input type="text" class="mat-card-inp ip-inp" placeholder="192.168.x.x">
+      </div>
+      <div class="mat-card-field mat-card-full">
+        <span class="mat-card-lbl">UBICACIÓN</span>
+        <input type="text" class="mat-card-inp ubic-inp" placeholder="Ej: Entrada principal...">
+      </div>
+      <div class="mat-card-field mat-card-full">
+        <span class="mat-card-lbl">COMENTARIO</span>
+        <input type="text" class="mat-card-inp coment-inp" placeholder="Notas adicionales...">
+      </div>
+    </div>
+    <div class="mat-card-actions">
+      <button class="btn-card btn-card-scan">📷 Escanear serie</button>
+      <button class="btn-card" style="background:#fdecea;color:#c0392b;">🗑 Eliminar</button>
+    </div>`;
+  card.serie_input  = div.querySelector('.serie-inp');
+  card.ip_input     = div.querySelector('.ip-inp');
+  card.ubic_input   = div.querySelector('.ubic-inp');
+  card.coment_input = div.querySelector('.coment-inp');
+  card.badge_el     = div.querySelector('.mat-card-badge');
+  card._div         = div;
+  div.querySelector('.furg-ref').addEventListener('input', function() {
+    card.ref = this.value; card.nombre = this.value;
+  });
+  div.querySelector('.btn-card-scan').addEventListener('click', () =>
+    openScanner(card.serie_input, null, 'Nº DE SERIE (furgoneta)'));
+  div.querySelectorAll('.btn-card')[1].addEventListener('click', () => {
+    salCards.splice(salCards.indexOf(card), 1);
+    div.remove();
+    actualizarComparacion();
+  });
+  const btnF = document.getElementById('btn-add-furgoneta');
+  salCardsSection.insertBefore(div, btnF);
+  actualizarComparacion();
+}
+
+function refrescarBadge(card) {
+  if (!card.badge_el) return;
+  const e = getEstado(card);
+  card.badge_el.textContent = e.label;
+  card.badge_el.className = `mat-card-badge ${e.cls}`;
+}
+
+function actualizarComparacion() {
+  if (!salDataActual) return;
+  const total     = salCards.length;
+  const devueltos = salCards.filter(c => c.devuelto).length;
+  const furgoneta = salCards.filter(c => c.es_furgoneta && !c.devuelto).length;
+  const instalados= total - devueltos;
+  const nPres     = presupuestoLineas.length;
+  let html = '<div style="display:flex;gap:6px;flex-wrap:wrap;">';
+  html += `<span style="background:#d4edda;color:#155724;padding:4px 12px;border-radius:10px;font-size:12px;font-weight:700;">✅ Instalados: ${instalados}</span>`;
+  if (devueltos) html += `<span style="background:#f8d7da;color:#721c24;padding:4px 12px;border-radius:10px;font-size:12px;font-weight:700;">↩ Devueltos: ${devueltos}</span>`;
+  if (furgoneta) html += `<span style="background:#cce5ff;color:#004085;padding:4px 12px;border-radius:10px;font-size:12px;font-weight:700;">🚐 Furgoneta: ${furgoneta}</span>`;
+  if (nPres)     html += `<span style="background:#fff3cd;color:#856404;padding:4px 12px;border-radius:10px;font-size:12px;font-weight:700;">📋 Presupuestados: ${nPres}</span>`;
+  html += '</div>';
+  compSection.innerHTML = html;
+  compSection.style.display = 'block';
+}
+
+// ── Botón: Imprimir / PDF ────────────────────────────────
+document.getElementById('btn-print').addEventListener('click', () => {
+  window.print();
+});
+
 // ── Botón: Descargar Excel ────────────────────────────────
 document.getElementById('btn-excel').addEventListener('click', () => {
-  if (!window.XLSX) { showToast('Cargando librería, espera...'); return; }
+  try {
+  const mat = getMaterial();
 
-  const filas = [
-    ['FICHA INSTALACIÓN CCTV / SEGURIDAD — SETEL Seguridad'],
-    [],
-    ['AVISO Nº', g('aviso'), 'Nº CONTRATO', g('contrato'), 'Nº CLIENTE', g('cliente'), 'FECHA', g('fecha')],
-    ['NOMBRE COMERCIAL', g('nomcom')],
-    ['NOMBRE', g('nombre')],
-    ['DIRECCIÓN', g('dir'), 'POBLACIÓN', g('pobl'), 'C.P.', g('cp')],
-    ['CONTACTO', g('contacto'), 'TLFNO', g('tlfno'), 'E-MAIL', g('email')],
-    ['MANTENIMIENTO', g('mant'), 'VÍA PÚBLICA', g('via'), 'VIDEO VERI', g('video'), 'TÉCNICO', g('tecnico')],
-    [],
-    ['MATERIAL INSTALADO'],
-    ['REFERENCIA', 'DESCRIPCIÓN', 'Nº SERIE', 'IP CÁMARA', 'UBICACIÓN', 'CABLE/CANAL'],
-  ];
+  const esc = (v) => String(v ?? '').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+  const v = (id) => esc(g(id));
 
-  getMaterial().forEach(m => filas.push([m.ref, m.desc, m.serie, m.ip, m.ubic, m.cable]));
+  const AZ  = '#1a3a6b';
+  const BL  = '#ffffff';
+  const NA  = '#f5a623';
+  const NT  = '#412402';
+  const GR  = '#f0f2f5';
 
-  filas.push(
-    [], ['CONFIGURACIÓN DEL SISTEMA'],
-    ['DOMINIO', g('dom'), 'IP', g('ip'), 'CÁMARAS IP', g('camip')],
-    ['PUERTO', g('puerto'), 'PUERTO WEB', g('puertow'), 'P2P', g('p2p')],
-    ['DÍAS GRABADOS', g('dias'), 'ADMIN', g('adm'), 'USER', g('usr')],
-    ['CLAVE ADMIN', g('adm1')],
-    [], ['OBSERVACIONES', g('obs')]
-  );
+  const cell = (lbl, val, extra='') => `
+    <td style="padding:3px 6px;border:0.5px solid #ddd;vertical-align:middle;${extra}">
+      <span style="color:#666;font-size:8px;display:block;font-family:Arial;">${lbl}</span>
+      <span style="font-size:11px;font-family:Arial;">${val ?? ''}</span>
+    </td>`;
 
-  const ws = XLSX.utils.aoa_to_sheet(filas);
-  const wb = XLSX.utils.book_new();
-  XLSX.utils.book_append_sheet(wb, ws, 'Ficha');
+  const sec = (t) => `
+    <tr><td colspan="6" style="background:${AZ};color:${BL};padding:4px 8px;
+      font-size:11px;font-weight:700;font-family:Arial;letter-spacing:0.4px;">${t}</td></tr>`;
 
+  const mhdr = (t, extra='') => `
+    <td style="background:${NA};color:${NT};padding:4px 6px;border:0.5px solid #ccc;
+      font-size:10px;font-weight:700;font-family:Arial;${extra}">${t}</td>`;
+
+  let html = `
+<html xmlns:o="urn:schemas-microsoft-com:office:office"
+      xmlns:x="urn:schemas-microsoft-com:office:excel"
+      xmlns="http://www.w3.org/TR/REC-html40">
+<head><meta charset="UTF-8">
+<!--[if gte mso 9]><xml><x:ExcelWorkbook><x:ExcelWorksheets>
+<x:ExcelWorksheet><x:Name>Ficha</x:Name></x:ExcelWorksheet>
+</x:ExcelWorksheets></x:ExcelWorkbook></xml><![endif]-->
+</head><body>
+<table style="border-collapse:collapse;width:720px;">
+  <tr>
+    <td colspan="6" style="background:${AZ};color:${BL};padding:5px 10px;
+      font-size:11px;font-weight:700;font-family:Arial;">
+      Técnicos de Servicios Múltiples S.L. &nbsp;&nbsp; SETEL Seguridad
+    </td>
+  </tr>
+  <tr>
+    <td colspan="6" style="background:${NA};color:${NT};text-align:center;padding:5px;
+      font-size:14px;font-weight:700;font-family:Arial;">FICHA INSTALACIÓN CCTV / SEGURIDAD</td>
+  </tr>
+  ${sec('DATOS DEL CLIENTE')}
+  <tr>
+    ${cell('BUSCAR CLIENTE / AVISO', v('aviso'), 'width:160px;')}
+    ${cell('Nº CONTRATO', v('contrato'), 'width:120px;')}
+    ${cell('Nº CLIENTE', v('cliente'), 'width:100px;')}
+    <td colspan="3" style="padding:3px 6px;border:0.5px solid #ddd;">
+      <span style="color:#666;font-size:8px;display:block;font-family:Arial;">FECHA</span>
+      <span style="font-size:11px;font-family:Arial;">${v('fecha') ?? ''}</span>
+    </td>
+  </tr>
+  <tr>
+    <td colspan="6" style="padding:3px 6px;border:0.5px solid #ddd;">
+      <span style="color:#666;font-size:8px;display:block;font-family:Arial;">NOMBRE COMERCIAL</span>
+      <span style="font-size:11px;font-family:Arial;">${v('nomcom') ?? ''}</span>
+    </td>
+  </tr>
+  <tr>
+    <td colspan="6" style="padding:3px 6px;border:0.5px solid #ddd;background:${GR};">
+      <span style="color:#666;font-size:8px;display:block;font-family:Arial;">NOMBRE</span>
+      <span style="font-size:11px;font-family:Arial;">${v('nombre') ?? ''}</span>
+    </td>
+  </tr>
+  <tr>
+    <td colspan="3" style="padding:3px 6px;border:0.5px solid #ddd;">
+      <span style="color:#666;font-size:8px;display:block;font-family:Arial;">DIRECCIÓN INSTAL.</span>
+      <span style="font-size:11px;font-family:Arial;">${v('dir') ?? ''}</span>
+    </td>
+    ${cell('POBLACIÓN', v('pobl'))}
+    ${cell('C.P.', v('cp'))}
+    <td style="border:none;"></td>
+  </tr>
+  <tr style="background:${GR};">
+    ${cell('PERSONA CONTACTO', v('contacto'))}
+    ${cell('TLFNO', v('tlfno'))}
+    <td colspan="4" style="padding:3px 6px;border:0.5px solid #ddd;">
+      <span style="color:#666;font-size:8px;display:block;font-family:Arial;">E-MAIL</span>
+      <span style="font-size:11px;font-family:Arial;">${v('email') ?? ''}</span>
+    </td>
+  </tr>
+  <tr>
+    ${cell('MANT.', v('mant'), 'width:80px;')}
+    ${cell('VÍA PÚB.', v('via'), 'width:80px;')}
+    ${cell('VIDEO VER.', v('video'), 'width:80px;')}
+    <td colspan="3" style="padding:3px 6px;border:0.5px solid #ddd;">
+      <span style="color:#666;font-size:8px;display:block;font-family:Arial;">TÉCNICO</span>
+      <span style="font-size:11px;font-family:Arial;">${v('tecnico') ?? ''}</span>
+    </td>
+  </tr>
+  ${sec('MATERIAL INSTALADO')}
+  <tr>
+    ${mhdr('REFERENCIA', 'width:110px;')}
+    ${mhdr('DESCRIPCIÓN', 'width:160px;')}
+    ${mhdr('Nº SERIE', 'width:110px;')}
+    ${mhdr('IP CÁMARA', 'width:80px;')}
+    <td colspan="2" style="background:${NA};color:${NT};padding:4px 6px;border:0.5px solid #ccc;
+      font-size:10px;font-weight:700;font-family:Arial;">UBICACIÓN</td>
+  </tr>`;
+
+  const minFilas = Math.max(mat.length, 10);
+  for (let i = 0; i < minFilas; i++) {
+    const m  = mat[i] || {};
+    const bg = i % 2 === 0 ? BL : GR;
+    const devTag = m.devuelto ? ' [DEVUELTO]' : '';
+    const furgTag = m.furgoneta ? ' [FURGONETA]' : '';
+    html += `<tr style="background:${bg};height:22px;">
+      <td style="padding:3px 6px;border:0.5px solid #ddd;font-size:11px;font-family:Arial;">${esc(m.ref)||''}</td>
+      <td style="padding:3px 6px;border:0.5px solid #ddd;font-size:11px;font-family:Arial;">${esc(m.desc)||''}${devTag}${furgTag}</td>
+      <td style="padding:3px 6px;border:0.5px solid #ddd;font-size:11px;font-family:Arial;">${esc(m.serie)||''}</td>
+      <td style="padding:3px 6px;border:0.5px solid #ddd;font-size:11px;font-family:Arial;">${esc(m.ip)||''}</td>
+      <td colspan="2" style="padding:3px 6px;border:0.5px solid #ddd;font-size:11px;font-family:Arial;">${esc(m.ubic)||''}</td>
+    </tr>`;
+  }
+
+  html += `
+  ${sec('CONFIGURACIÓN DEL SISTEMA')}
+  <tr>
+    ${cell('DOMINIO', v('dom'))}
+    ${cell('DIRECCIÓN IP', v('ip'))}
+    ${cell('CÁMARAS IP', v('camip'))}
+    <td colspan="3" style="border:none;"></td>
+  </tr>
+  <tr style="background:${GR};">
+    ${cell('PUERTO', v('puerto'))}
+    ${cell('PUERTO WEB', v('puertow'))}
+    ${cell('P2P', v('p2p'))}
+    <td colspan="3" style="border:none;"></td>
+  </tr>
+  <tr>
+    ${cell('DÍAS GRABADOS', v('dias'))}
+    ${cell('ADMIN', v('adm'))}
+    ${cell('USER', v('usr'))}
+    <td colspan="3" style="border:none;"></td>
+  </tr>
+  <tr style="background:${GR};">
+    <td colspan="2" style="padding:3px 6px;border:0.5px solid #ddd;">
+      <span style="color:#666;font-size:8px;display:block;font-family:Arial;">CLAVE ADMIN</span>
+      <span style="font-size:11px;font-family:Arial;">${v('adm1') ?? ''}</span>
+    </td>
+    <td colspan="4" style="padding:3px 6px;border:0.5px solid #ddd;">
+      <span style="color:#666;font-size:8px;display:block;font-family:Arial;">CABLE</span>
+      <span style="font-size:11px;font-family:Arial;">${v('cable') ?? ''}</span>
+    </td>
+  </tr>
+  ${sec('OBSERVACIONES / NOTAS')}
+  <tr>
+    <td colspan="6" style="padding:8px 6px;border:0.5px solid #ddd;font-size:11px;
+      font-family:Arial;min-height:60px;">${v('obs') ?? ''}</td>
+  </tr>
+  <tr>
+    <td colspan="6" style="background:${AZ};color:#B5D4F4;font-size:10px;padding:5px 8px;
+      text-align:center;font-family:Arial;">
+      Técnicos de Servicios Múltiples S.L. · SETEL Seguridad · 923 12 50 97 · seguridad@setelgrupo.com · DGP Nº 2.900
+    </td>
+  </tr>
+</table></body></html>`;
+
+  const blob = new Blob([html], { type: 'application/vnd.ms-excel;charset=utf-8' });
+  const url  = URL.createObjectURL(blob);
+  const a    = document.createElement('a');
   const nombre   = (g('tecnico') || 'tecnico').replace(/\s+/g, '_');
   const contrato = (g('contrato') || 'SC').replace(/\s+/g, '_');
   const fecha    = g('fecha') || new Date().toISOString().slice(0, 10);
-  XLSX.writeFile(wb, `FICHA_${nombre}_${contrato}_${fecha}.xlsx`);
-
+  a.href     = url;
+  a.download = `FICHA_${nombre}_${contrato}_${fecha}.xls`;
+  a.click();
+  URL.revokeObjectURL(url);
   showToast('✅ Excel descargado');
+  } catch(err) {
+    console.error('Excel error:', err);
+    showToast('⚠️ Error al generar Excel: ' + err.message, 4000);
+  }
 });
 
 // ── Botón: Enviar a Stel Order ────────────────────────────
@@ -866,6 +1403,7 @@ document.getElementById('btn-stel').addEventListener('click', async () => {
     aviso:     g('aviso'),
     contrato:  g('contrato'),
     cliente:   g('cliente'),
+    id_stel:   g('id_stel'),
     nomcom:    g('nomcom') || g('nombre'),
     fecha:     g('fecha'),
     tecnico:   g('tecnico'),
@@ -876,7 +1414,10 @@ document.getElementById('btn-stel').addEventListener('click', async () => {
     tlfno:     g('tlfno'),
     email:     g('email'),
     mant:      g('mant'),
+    adm1:      g('adm1'),
+    cable:     g('cable'),
     obs:       g('obs'),
+    sal_ref:   salRefInput ? salRefInput.value.trim() : '',
     material:  material,
   };
 
@@ -895,7 +1436,9 @@ document.getElementById('btn-stel').addEventListener('click', async () => {
     const data = await resp.json();
 
     if (resp.ok && data.ok) {
-      showToast(`✅ Parte creado en Stel Order${data.id ? ' #' + data.id : ''}`, 5000);
+      const ref = data.referencia || data.id || '';
+      const adjMsg = data.adjunto ? ' · PDF adjunto' : '';
+      showToast(`✅ Parte creado${ref ? ' — Ref: ' + ref : ''}${adjMsg}`, 5000);
     } else {
       showToast('⚠️ ' + (data.error || 'Error al enviar'), 5000);
     }
@@ -907,6 +1450,7 @@ document.getElementById('btn-stel').addEventListener('click', async () => {
     btn.disabled = false;
   }
 });
+
 </script>
 </body>
 </html>
