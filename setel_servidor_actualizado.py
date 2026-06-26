@@ -28,6 +28,14 @@ BASE_DIR     = os.path.dirname(os.path.abspath(__file__))
 FICHA_PATH   = os.path.join(BASE_DIR, "ficha_cctv_tecnicos.html")
 ALMACEN_PATH = os.path.join(BASE_DIR, "almacen.html")
 REVISION_PATH= os.path.join(BASE_DIR, "revision.html")
+# mantenimiento.html: en la nube (Railway) esta en la raiz del repo (BASE_DIR);
+# en local esta en la carpeta hermana "Revision de mantenimiento".
+MANT_PATH    = os.path.join(BASE_DIR, "mantenimiento.html")
+if not os.path.exists(MANT_PATH):
+    MANT_PATH = os.path.normpath(os.path.join(BASE_DIR, "..", "Revision de mantenimiento", "mantenimiento.html"))
+# Carpeta donde se archivan los partes recibidos (copia de seguridad)
+_MANT_BASE   = os.path.normpath(os.path.join(BASE_DIR, "..", "Revision de mantenimiento"))
+MANT_DIR     = os.path.join(_MANT_BASE if os.path.isdir(_MANT_BASE) else BASE_DIR, "partes_recibidos")
 SALIDAS_DIR  = os.path.join(BASE_DIR, "salidas")
 PARTES_DIR   = os.path.join(BASE_DIR, "partes")
 os.makedirs(SALIDAS_DIR, exist_ok=True)
@@ -35,12 +43,32 @@ os.makedirs(PARTES_DIR,  exist_ok=True)
 
 
 def _lista(data, *claves):
+    """Busca una lista dentro de un JSON de Stel Order.
+    Prueba cada clave en el nivel raíz y también traversa anidados.
+    """
     if isinstance(data, list):
         return data
-    if isinstance(data, dict):
-        for k in claves:
-            if k in data and isinstance(data[k], list):
-                return data[k]
+    if not isinstance(data, dict):
+        return []
+    # 1. Buscar cada clave en el nivel raíz
+    for k in claves:
+        if k in data and isinstance(data[k], list):
+            return data[k]
+    # 2. Traversar un nivel de profundidad (p.ej. data["data"]["products"])
+    for k in claves:
+        if k in data and isinstance(data[k], dict):
+            sub = data[k]
+            for k2 in claves:
+                if k2 in sub and isinstance(sub[k2], list):
+                    return sub[k2]
+    # 3. Buscar recursivamente cualquier lista en los valores del dict
+    for k, v in data.items():
+        if isinstance(v, list) and v:
+            return v
+        if isinstance(v, dict):
+            for k2, v2 in v.items():
+                if isinstance(v2, list) and v2:
+                    return v2
     return []
 
 
@@ -62,6 +90,11 @@ def _campos_cliente(cli):
         "email":    cli.get("email") or "",
     }
 
+
+@app.route("/api/ping")
+def ping():
+    import time
+    return jsonify({"ok": True, "ts": time.time()})
 
 @app.route("/", methods=["GET"])
 @app.route("/ficha", methods=["GET"])
@@ -87,6 +120,37 @@ def revision():
     resp = Response(html, mimetype="text/html")
     resp.headers["Cache-Control"] = "no-store, no-cache, must-revalidate, max-age=0"
     return resp
+
+@app.route("/mantenimiento", methods=["GET"])
+def mantenimiento():
+    with open(MANT_PATH, "r", encoding="utf-8") as f:
+        html = f.read()
+    resp = Response(html, mimetype="text/html")
+    resp.headers["Cache-Control"] = "no-store, no-cache, must-revalidate, max-age=0"
+    return resp
+
+@app.route("/api/enviar-mantenimiento", methods=["POST"])
+def enviar_mantenimiento():
+    """Archiva un parte de mantenimiento (copia de seguridad en la oficina)."""
+    try:
+        data = request.get_json(force=True) or {}
+    except Exception:
+        return jsonify({"ok": False, "error": "JSON invalido"}), 400
+    campos = data.get("campos", {}) or {}
+    if not (campos.get("nombre") or "").strip():
+        return jsonify({"ok": False, "error": "Falta el nombre del cliente"}), 400
+    try:
+        os.makedirs(MANT_DIR, exist_ok=True)
+        hoy = datetime.now().strftime("%Y%m%d")
+        n = len(glob.glob(os.path.join(MANT_DIR, f"MT-{hoy}-*.json"))) + 1
+        ref = f"MT-{hoy}-{n:03d}"
+        data["referencia"] = ref
+        data["recibido"] = datetime.now().isoformat()
+        with open(os.path.join(MANT_DIR, f"{ref}.json"), "w", encoding="utf-8") as f:
+            json.dump(data, f, ensure_ascii=False, indent=2)
+        return jsonify({"ok": True, "referencia": ref})
+    except Exception as e:
+        return jsonify({"ok": False, "error": str(e)}), 500
 
 def _html_con_tecnico(nombre_tecnico=None):
     with open(FICHA_PATH, "r", encoding="utf-8") as f:
@@ -118,23 +182,106 @@ def buscar_producto():
     if not barcode:
         return jsonify({"error": "Falta barcode"}), 400
     try:
-        r = requests.get(f"{STEL_BASE_URL}/app/products",
-                         headers=HEADERS,
-                         params={"barcode": barcode, "limit": 5},
-                         timeout=10)
-        items = _lista(r.json(), "data", "products", "items")
+        items = []
+        for param in [{"barcode": barcode}, {"reference": barcode}, {"name": barcode}]:
+            r = requests.get(f"{STEL_BASE_URL}/app/products",
+                             headers=HEADERS,
+                             params={**param, "limit": 5},
+                             timeout=10)
+            if r.status_code != 200:
+                continue
+            try:
+                found = _lista(r.json(), "data", "products", "items")
+            except Exception:
+                continue
+            if found:
+                items = found
+                break
+        # Si no hay items, devolver respuesta de diagnóstico
         if not items:
-            r2 = requests.get(f"{STEL_BASE_URL}/app/products",
-                              headers=HEADERS,
-                              params={"reference": barcode, "limit": 5},
-                              timeout=10)
-            items = _lista(r2.json(), "data", "products", "items")
+            # Intentar obtener el JSON crudo del primer intento para diagnóstico
+            try:
+                r_diag = requests.get(f"{STEL_BASE_URL}/app/products",
+                                      headers=HEADERS,
+                                      params={"reference": barcode, "limit": 5},
+                                      timeout=10)
+                raw = r_diag.json() if r_diag.status_code == 200 else {"http_status": r_diag.status_code}
+            except Exception as ex:
+                raw = {"error_diag": str(ex)}
+            return jsonify({"found": False, "_debug_raw": raw})
+
         if items:
             p = items[0]
-            nombre     = p.get("name") or p.get("description") or ""
-            referencia = p.get("reference") or p.get("barcode") or barcode
-            return jsonify({"found": True, "nombre": nombre, "referencia": referencia,
-                            "item_id": p.get("id"), "producto": p})
+            def _extraer_nombre_producto(p):
+                """Busca la descripción en cualquier campo del producto, incluyendo anidados."""
+                # Campos directos - incluye variantes camelCase y con guiones
+                CAMPOS_NOMBRE = [
+                    # Inglés estándar
+                    "name", "description", "title",
+                    # Con guion (estilo Stel Order)
+                    "product-name", "product-description", "item-name",
+                    "commercial-name", "comercial-name", "short-description",
+                    "long-description", "article-name",
+                    # camelCase (común en APIs españolas)
+                    "productName", "productDescription", "comercialName",
+                    "nombreComercial", "itemName", "articleName",
+                    "shortDescription", "longDescription",
+                    # Español
+                    "nombre", "titulo", "descripcion", "denominacion",
+                    "articulo", "detalle", "etiqueta", "label",
+                    "summary", "detail", "denomination",
+                ]
+                CAMPOS_SKIP_SET = {
+                    "id", "reference", "barcode", "ean", "code", "sku",
+                    "type", "status", "price", "cost", "tax", "quantity",
+                    "stock", "weight", "created", "updated", "category",
+                    "family", "provider", "url", "image", "currency",
+                    "measure", "unit", "vat", "margin", "discount",
+                }
+                def _es_skip(k):
+                    kl = k.lower().replace("-", "").replace("_", "")
+                    return any(s in kl for s in CAMPOS_SKIP_SET)
+
+                # 1. Buscar en campos conocidos directamente
+                for f in CAMPOS_NOMBRE:
+                    v = p.get(f)
+                    if v and isinstance(v, str) and len(v.strip()) > 1:
+                        return v.strip()
+                # 2. Buscar en objetos anidados (p.ej. "product": {"name": "..."})
+                for k, v in p.items():
+                    if isinstance(v, dict):
+                        for f in CAMPOS_NOMBRE:
+                            vv = v.get(f)
+                            if vv and isinstance(vv, str) and len(vv.strip()) > 1:
+                                return vv.strip()
+                        # También cualquier string largo dentro del subobjeto
+                        for sk, sv in v.items():
+                            if not _es_skip(sk) and isinstance(sv, str) and len(sv.strip()) > 3 and not sv.strip().isdigit():
+                                return sv.strip()
+                # 3. Cualquier string largo que no sea un campo técnico
+                candidatos = [
+                    (k, str(v)) for k, v in p.items()
+                    if not _es_skip(k)
+                    and isinstance(v, str)
+                    and len(v.strip()) > 3
+                    and not v.strip().isdigit()
+                ]
+                candidatos.sort(key=lambda x: len(x[1]), reverse=True)
+                if candidatos:
+                    return candidatos[0][1].strip()
+                return ""
+
+            nombre = _extraer_nombre_producto(p)
+            referencia = p.get("reference") or p.get("barcode") or p.get("ean") or barcode
+            # Devolver también todos los campos para diagnóstico
+            return jsonify({
+                "found":      True,
+                "nombre":     nombre,
+                "referencia": referencia,
+                "item_id":    p.get("id"),
+                "producto":   p,
+                "_campos":    list(p.keys()),  # para diagnóstico
+            })
         return jsonify({"found": False})
     except requests.exceptions.ConnectionError:
         return jsonify({"error": "Sin conexion a Stel Order"}), 503
@@ -161,36 +308,150 @@ def buscar_cliente_por_nombre():
                 clientes = items
                 break
         if not clientes:
-            r = requests.get(f"{STEL_BASE_URL}/app/clients",
-                             headers=HEADERS,
-                             params={"limit": 200, "sort": "name", "order": "asc"},
-                             timeout=10)
-            if r.status_code == 200:
-                items = _lista(r.json(), "data", "clients", "items")
-                nombre_lower = nombre.lower()
-                clientes = [
-                    c for c in items
-                    if nombre_lower in (c.get("name") or "").lower()
-                    or nombre_lower in (c.get("legal-name") or "").lower()
-                ][:15]
+            # Fallback: traer todos y filtrar localmente con normalización
+            import unicodedata, re as _re
+            def _norm(s):
+                # quitar acentos, puntos, guiones y pasar a minúsculas
+                s = unicodedata.normalize("NFD", str(s))
+                s = "".join(c for c in s if unicodedata.category(c) != "Mn")
+                s = _re.sub(r"[^a-z0-9 ]", " ", s.lower())
+                return " ".join(s.split())
+
+            palabras = _norm(nombre).split()
+
+            for page_limit in [200, 500]:
+                r = requests.get(f"{STEL_BASE_URL}/app/clients",
+                                 headers=HEADERS,
+                                 params={"limit": page_limit, "sort": "name", "order": "asc"},
+                                 timeout=15)
+                if r.status_code == 200:
+                    items = _lista(r.json(), "data", "clients", "items")
+                    def _coincide(c):
+                        campos = " ".join([
+                            c.get("name") or "",
+                            c.get("legal-name") or "",
+                            c.get("commercial-name") or "",
+                            c.get("nomcom") or "",
+                        ])
+                        texto = _norm(campos)
+                        return all(p in texto for p in palabras)
+                    clientes = [c for c in items if _coincide(c)][:15]
+                    if clientes:
+                        break
         resultado = []
+        # Posibles nombres del campo número/referencia de cliente en Stel Order
+        NUM_FIELDS = ["referencia", "reference", "client-number", "num", "numero",
+                      "cod", "codigo", "code", "external-id", "customer-number",
+                      "client_number", "num_cliente", "nif", "cif"]
         for c in clientes[:15]:
             addr = c.get("main-address") or {}
-            num_cli = (c.get("referencia") or c.get("reference") or
-                       c.get("client-number") or str(c.get("id", "")))
+            # Buscar el número en campos conocidos y en cualquier campo que lo contenga
+            num_cli = next((str(c[f]) for f in NUM_FIELDS if c.get(f)), None)
+            if not num_cli:
+                num_cli = str(c.get("id", ""))
             resultado.append({
                 "id":      str(c.get("id", "")),
                 "num_cli": num_cli,
-                "nombre":  c.get("legal-name") or c.get("name") or "",
-                "dir":     addr.get("address-data") or addr.get("formatted-address") or "",
-                "pobl":    addr.get("city-town") or addr.get("city") or "",
-                "cp":      addr.get("postal-code") or "",
-                "tlfno":   c.get("phone") or c.get("phone2") or "",
+                "nombre":  (c.get("legal-name") or c.get("name") or
+                            c.get("commercial-name") or c.get("nomcom") or ""),
+                "dir":     addr.get("address-data") or addr.get("formatted-address") or addr.get("address") or "",
+                "pobl":    addr.get("city-town") or addr.get("city") or addr.get("town") or "",
+                "cp":      addr.get("postal-code") or addr.get("zip") or "",
+                "tlfno":   c.get("phone") or c.get("phone2") or c.get("mobile") or "",
                 "email":   c.get("email") or "",
             })
         return jsonify({"clientes": resultado})
     except requests.exceptions.ConnectionError:
         return jsonify({"error": "Sin conexion a Stel Order"}), 503
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
+
+@app.route("/api/buscar-cliente-numero", methods=["GET"])
+def buscar_cliente_por_numero():
+    numero = request.args.get("numero", "").strip()
+    if not numero or len(numero) < 1:
+        return jsonify({"clientes": []})
+    try:
+        clientes = []
+        # Intentar búsqueda directa por referencia/número
+        for param in [{"referencia": numero}, {"reference": numero}, {"client-number": numero}]:
+            r = requests.get(f"{STEL_BASE_URL}/app/clients",
+                             headers=HEADERS,
+                             params={**param, "limit": 20},
+                             timeout=10)
+            if r.status_code == 200:
+                items = _lista(r.json(), "data", "clients", "items")
+                if items:
+                    clientes = items
+                    break
+        if not clientes:
+            # Fallback: traer todos y filtrar por número en CUALQUIER campo
+            for page_limit in [200, 500]:
+                r = requests.get(f"{STEL_BASE_URL}/app/clients",
+                                 headers=HEADERS,
+                                 params={"limit": page_limit, "sort": "name", "order": "asc"},
+                                 timeout=15)
+                if r.status_code == 200:
+                    items = _lista(r.json(), "data", "clients", "items")
+                    # Buscar el número en todos los valores del objeto (no solo campos conocidos)
+                    def _contiene_numero(c, num):
+                        for v in c.values():
+                            if isinstance(v, (str, int)) and num in str(v):
+                                return True
+                        return False
+                    clientes = [c for c in items if _contiene_numero(c, numero)][:15]
+                    if clientes:
+                        break
+        resultado = []
+        # Posibles nombres del campo número/referencia de cliente en Stel Order
+        NUM_FIELDS = ["referencia", "reference", "client-number", "num", "numero",
+                      "cod", "codigo", "code", "external-id", "customer-number",
+                      "client_number", "num_cliente", "nif", "cif"]
+        for c in clientes[:15]:
+            addr = c.get("main-address") or {}
+            # Buscar el número en campos conocidos y en cualquier campo que lo contenga
+            num_cli = next((str(c[f]) for f in NUM_FIELDS if c.get(f)), None)
+            if not num_cli:
+                num_cli = str(c.get("id", ""))
+            resultado.append({
+                "id":      str(c.get("id", "")),
+                "num_cli": num_cli,
+                "nombre":  (c.get("legal-name") or c.get("name") or
+                            c.get("commercial-name") or c.get("nomcom") or ""),
+                "dir":     addr.get("address-data") or addr.get("formatted-address") or addr.get("address") or "",
+                "pobl":    addr.get("city-town") or addr.get("city") or addr.get("town") or "",
+                "cp":      addr.get("postal-code") or addr.get("zip") or "",
+                "tlfno":   c.get("phone") or c.get("phone2") or c.get("mobile") or "",
+                "email":   c.get("email") or "",
+            })
+        return jsonify({"clientes": resultado})
+    except requests.exceptions.ConnectionError:
+        return jsonify({"error": "Sin conexion a Stel Order"}), 503
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
+
+@app.route("/api/debug-cliente-campos", methods=["GET"])
+def debug_cliente_campos():
+    """Endpoint de diagnóstico: muestra las claves del primer cliente devuelto por Stel Order"""
+    try:
+        r = requests.get(f"{STEL_BASE_URL}/app/clients",
+                         headers=HEADERS,
+                         params={"limit": 3},
+                         timeout=10)
+        if r.status_code != 200:
+            return jsonify({"error": f"Stel devolvió {r.status_code}", "body": r.text[:500]}), 502
+        raw = r.json()
+        items = _lista(raw, "data", "clients", "items")
+        if not items:
+            return jsonify({"error": "Sin clientes", "raw_keys": list(raw.keys()) if isinstance(raw, dict) else "lista vacía"})
+        primer = items[0]
+        return jsonify({
+            "campos": list(primer.keys()),
+            "muestra": {k: str(v)[:80] for k, v in primer.items() if not isinstance(v, dict)},
+            "total_items": len(items)
+        })
     except Exception as e:
         return jsonify({"error": str(e)}), 500
 
@@ -317,7 +578,8 @@ def _html_pdf_ficha(data):
         "font-size:7.5pt;color:#888;display:flex;justify-content:space-between;}"
         "</style></head><body>"
         f"<div class='hdr'><h1>SETEL Seguridad &mdash; Ficha CCTV</h1>"
-        f"<div class='meta'><div>Parte: <strong>{v('contrato')}</strong></div>"
+        f"<div class='meta'><div>Aviso: <strong>{v('aviso') or v('contrato')}</strong></div>"
+        f"<div>Contrato: {v('contrato')}</div>"
         f"<div>Fecha: {fecha}</div></div></div>"
         "<div class='sec'>DATOS DEL CLIENTE</div>"
         f"<div class='grid g2'>"
@@ -334,7 +596,19 @@ def _html_pdf_ficha(data):
         "<div class='sec'>DATOS DE LA INTERVENCI&Oacute;N</div>"
         f"<div class='grid g3'>"
         f"<div class='field'><span class='lbl'>T&Eacute;CNICO</span><span class='val'>{v('tecnico')}</span></div>"
-        f"<div class='field'><span class='lbl'>CLAVE ADMIN</span><span class='val'>{v('adm1')}</span></div>"
+        f"<div class='field'><span class='lbl'>VIA / AVISO</span><span class='val'>{v('aviso')} {v('via')}</span></div>"
+        f"<div class='field'><span class='lbl'>RECEPTORA / ABONADO</span><span class='val'>{v('receptora')} / {v('n_abonado')}</span></div></div>"
+        f"<div class='grid g3'>"
+        f"<div class='field'><span class='lbl'>V&Iacute;DEO / DOM</span><span class='val'>{v('video')} / {v('dom')}</span></div>"
+        f"<div class='field'><span class='lbl'>IP C&Aacute;MARA / CAM IP</span><span class='val'>{v('ip')} / {v('camip')}</span></div>"
+        f"<div class='field'><span class='lbl'>PUERTO / PUERTOW / P2P</span><span class='val'>{v('puerto')} / {v('puertow')} / {v('p2p')}</span></div></div>"
+        f"<div class='grid g3'>"
+        f"<div class='field'><span class='lbl'>MANTENIMIENTO</span><span class='val'>{v('mant')}</span></div>"
+        f"<div class='field'><span class='lbl'>D&Iacute;AS GRABACI&Oacute;N</span><span class='val'>{v('dias')}</span></div>"
+        f"<div class='field'><span class='lbl'>CLAVE ADMIN</span><span class='val'>{v('adm') or v('adm1')}</span></div></div>"
+        f"<div class='grid g3'>"
+        f"<div class='field'><span class='lbl'>USUARIO</span><span class='val'>{v('usr')}</span></div>"
+        f"<div class='field'><span class='lbl'>CONTACTO</span><span class='val'>{v('contacto')}</span></div>"
         f"<div class='field'><span class='lbl'>CABLE</span><span class='val'>{v('cable')}</span></div></div>"
         "<div class='sec'>MATERIAL INSTALADO</div>"
         "<div style='margin:0 18px;'><table><thead><tr>"
@@ -343,8 +617,9 @@ def _html_pdf_ficha(data):
         "<th style='width:80px'>IP</th><th>UBICACI&Oacute;N</th>"
         f"</tr></thead><tbody>{filas_mat}</tbody></table></div>"
         "<div class='sec'>OBSERVACIONES</div>"
-        f"<div class='obs'>{v('obs')}</div>"
-        f"<div class='footer'>"
+        f"<div class='obs'>{v('observaciones') or v('obs')}</div>"
+        + _html_firma_fotos(data)
+        + f"<div class='footer'>"
         "<span>SETEL Seguridad &mdash; T&eacute;cnicos de Servicios M&uacute;ltiples S.L. &mdash; Salamanca</span>"
         f"<span>Generado: {fecha}</span></div>"
         "</body></html>"
@@ -402,26 +677,25 @@ def enviar_parte():
     existing_p = glob.glob(os.path.join(PARTES_DIR, f"PT-{hoy_p}-*.json"))
     seq_p = len(existing_p) + 1
     parte_ref_local = f"PT-{hoy_p}-{seq_p:03d}"
-    parte_local = {
-        "referencia":  parte_ref_local,
-        "fecha":       datetime.now().isoformat(),
-        "estado":      "pendiente",
-        "sal_ref":     data.get("sal_ref", ""),
-        "presupuesto": data.get("contrato", ""),
-        "tecnico":     tecnico,
-        "nomcom":      data.get("nomcom") or data.get("nombre") or "",
-        "cliente_id":  "",
-        "direccion":   data.get("direccion") or data.get("dir") or "",
-        "poblacion":   data.get("poblacion") or data.get("pobl") or "",
-        "cp":          data.get("cp", ""),
-        "tlfno":       data.get("tlfno", ""),
-        "obs":         data.get("obs", ""),
-        "adm1":        data.get("adm1", ""),
-        "cable":       data.get("cable", ""),
-        "material":    material,
-        "wo_id":       None,
-        "wo_ref":      None,
-    }
+    # Guardar TODOS los campos del request + los generados por el servidor
+    parte_local = dict(data)   # copia completa del payload del técnico
+    parte_local.update({
+        "referencia":        parte_ref_local,
+        "fecha":             datetime.now().isoformat(),
+        "estado":            "pendiente",
+        "material":          material,
+        "presupuesto":       data.get("contrato", ""),
+        "aviso":             data.get("aviso", ""),
+        "nomcom":            data.get("nomcom") or data.get("nombre") or "",
+        "direccion":         data.get("direccion") or data.get("dir") or "",
+        "poblacion":         data.get("poblacion") or data.get("pobl") or "",
+        "observaciones":     data.get("observaciones") or data.get("obs") or "",
+        "firma_cliente":     data.get("firma_cliente") or {},
+        "firma_tecnico":     data.get("firma_tecnico") or {},
+        "fotos":             data.get("fotos") or [],
+        "wo_id":             None,
+        "wo_ref":            None,
+    })
 
     # ── 2. Buscar cliente en Stel Order ──────────────────────────────────────
     cliente_id = None
@@ -616,6 +890,73 @@ def buscar_presupuesto():
         return jsonify({"error": str(e)}), 500
 
 
+# ── Almacén: descuento de stock en Stel Order ─────────────────────────────────
+
+def _descontar_stock_stel(items_list, sal_ref=""):
+    """
+    Intenta descontar stock en Stel Order para cada item de la salida.
+    No lanza excepción: devuelve lista con resultado por item.
+    Prueba dos endpoints distintos según la versión de la API de Stel Order.
+    """
+    resultados = []
+    for item in items_list:
+        item_id  = item.get("item_id")
+        cantidad = int(item.get("cantidad", 1))
+        ref      = item.get("ref", "")
+        serie    = item.get("serie", "")
+
+        if not item_id:
+            resultados.append({"ref": ref, "status": "sin_id_stel"})
+            continue
+
+        nota = f"Salida almacén SETEL {sal_ref}"
+        if serie:
+            nota += f" | serie {serie}"
+
+        # Intento 1: endpoint por producto  (algunas versiones de Stel Order)
+        ok = False
+        try:
+            r = requests.post(
+                f"{STEL_BASE_URL}/app/products/{item_id}/stockMovements",
+                headers=HEADERS,
+                json={"quantity": -cantidad, "type": "out", "notes": nota},
+                timeout=10,
+            )
+            if r.status_code in (200, 201):
+                ok = True
+                resultados.append({"ref": ref, "status": "ok", "endpoint": "v1"})
+        except Exception:
+            pass
+
+        if ok:
+            continue
+
+        # Intento 2: endpoint global de movimientos
+        try:
+            r2 = requests.post(
+                f"{STEL_BASE_URL}/app/stockMovements",
+                headers=HEADERS,
+                json={
+                    "product-id": item_id,
+                    "quantity":   -cantidad,
+                    "type":       "out",
+                    "notes":      nota,
+                },
+                timeout=10,
+            )
+            if r2.status_code in (200, 201):
+                resultados.append({"ref": ref, "status": "ok", "endpoint": "v2"})
+            else:
+                resultados.append({
+                    "ref": ref, "status": "api_error",
+                    "code": r2.status_code, "body": r2.text[:200],
+                })
+        except Exception as e:
+            resultados.append({"ref": ref, "status": "error", "error": str(e)})
+
+    return resultados
+
+
 # ── Endpoints: almacén ────────────────────────────────────────────────────────
 
 @app.route("/api/salida-almacen", methods=["POST"])
@@ -627,13 +968,35 @@ def registrar_salida():
         existing_s = glob.glob(os.path.join(SALIDAS_DIR, f"SAL-{hoy_s}-*.json"))
         ref = f"SAL-{hoy_s}-{len(existing_s)+1:03d}"
         data["referencia"] = ref
+    data["fecha"] = datetime.now().isoformat()
     path = os.path.join(SALIDAS_DIR, f"{ref}.json")
     try:
         with open(path, "w", encoding="utf-8") as f:
             json.dump(data, f, ensure_ascii=False, indent=2)
-        return jsonify({"ok": True, "referencia": ref})
     except Exception as e:
         return jsonify({"error": str(e)}), 500
+
+    # Intentar descuento de stock en Stel Order (no bloquea si falla)
+    stel_resultado = []
+    try:
+        items_list = data.get("items", [])
+        if items_list:
+            stel_resultado = _descontar_stock_stel(items_list, ref)
+    except Exception as e:
+        stel_resultado = [{"status": "error_general", "error": str(e)}]
+
+    stel_ok    = all(r.get("status") == "ok" for r in stel_resultado) if stel_resultado else None
+    stel_msg   = ("Stock descontado en Stel Order ✓" if stel_ok
+                  else "Sin conexión a Stel Order (SAL guardada localmente)" if stel_resultado
+                  else "")
+
+    return jsonify({
+        "ok":           True,
+        "referencia":   ref,
+        "stel_stock":   stel_resultado,
+        "stel_ok":      stel_ok,
+        "stel_msg":     stel_msg,
+    })
 
 
 @app.route("/api/get-salida/<ref>", methods=["GET"])
@@ -659,11 +1022,13 @@ def lista_salidas():
                 with open(fp, encoding="utf-8") as f:
                     d = json.load(f)
                 salidas.append({
-                    "referencia": d.get("referencia", os.path.basename(fp).replace(".json","")),
-                    "fecha":      d.get("fecha", ""),
+                    "referencia":  d.get("referencia", os.path.basename(fp).replace(".json","")),
+                    "fecha":       d.get("fecha", ""),
                     "presupuesto": d.get("presupuesto", ""),
-                    "tecnico":    d.get("tecnico", ""),
-                    "items":      len(d.get("items", [])),
+                    "tecnico":     d.get("tecnico", ""),
+                    "items":       len(d.get("items", [])),
+                    "nomcom":      d.get("nomcom", ""),
+                    "poblacion":   d.get("poblacion", ""),
                 })
             except Exception:
                 pass
@@ -688,11 +1053,15 @@ def partes_pendientes():
                     "fecha":       d.get("fecha", ""),
                     "tecnico":     d.get("tecnico", ""),
                     "nomcom":      d.get("nomcom", ""),
+                    "aviso":       d.get("aviso", ""),
+                    "cliente":     d.get("cliente", ""),
                     "estado":      d.get("estado", "pendiente"),
                     "presupuesto": d.get("presupuesto", ""),
                     "sal_ref":     d.get("sal_ref", ""),
                     "n_items":     len(d.get("material", [])),
                     "wo_ref":      d.get("wo_ref", ""),
+                    "direccion":   d.get("direccion", ""),
+                    "poblacion":   d.get("poblacion", ""),
                 })
             except Exception:
                 pass
@@ -805,6 +1174,99 @@ def aprobar_parte(ref):
         import traceback; traceback.print_exc()
         return jsonify({"error": str(e)}), 500
 
+
+def _html_firma_fotos(parte):
+    """Genera HTML con firmas (cliente + técnico) y fotos para el libro PDF."""
+    html = ""
+
+    # Soporte nuevo formato (firma_cliente / firma_tecnico) y legado (firma)
+    firma_cli = parte.get("firma_cliente") or {}
+    firma_tec = parte.get("firma_tecnico") or {}
+    firma_legacy = parte.get("firma")  # compatibilidad partes anteriores
+
+    img_cli    = firma_cli.get("img")    if isinstance(firma_cli, dict) else None
+    nombre_cli = firma_cli.get("nombre", "") if isinstance(firma_cli, dict) else ""
+    img_tec    = firma_tec.get("img")    if isinstance(firma_tec, dict) else None
+    nombre_tec = firma_tec.get("nombre", "") if isinstance(firma_tec, dict) else ""
+
+    tiene_firma = img_cli or img_tec or firma_legacy
+
+    if tiene_firma:
+        html += "<div class='sec'>FIRMAS</div>"
+        html += "<div style='display:flex;gap:20px;padding:10px 18px;flex-wrap:wrap;'>"
+
+        if img_cli or firma_legacy:
+            src = img_cli or firma_legacy
+            lbl = nombre_cli or "Cliente"
+            html += (
+                "<div style='text-align:center;'>"
+                f"<img src='{src}' style='width:280px;max-height:90px;object-fit:contain;"
+                "border:1px solid #ccc;border-radius:4px;display:block;'>"
+                f"<div style='font-size:10px;color:#555;margin-top:4px;font-weight:600;'>{lbl}</div>"
+                "</div>"
+            )
+
+        if img_tec:
+            html += (
+                "<div style='text-align:center;'>"
+                f"<img src='{img_tec}' style='width:280px;max-height:90px;object-fit:contain;"
+                "border:1px solid #ccc;border-radius:4px;background:#f4f7ff;display:block;'>"
+                f"<div style='font-size:10px;color:#1a3a6b;margin-top:4px;font-weight:600;'>{nombre_tec or 'Técnico'}</div>"
+                "</div>"
+            )
+
+        html += "</div>"
+
+    fotos = parte.get("fotos", [])
+    if fotos:
+        fotos_html = "".join(
+            f"<div style='display:inline-block;margin:4px;'>"
+            f"<img src='{f}' style='width:180px;height:135px;object-fit:cover;"
+            "border-radius:4px;border:1px solid #ddd;' alt='Foto instalación'>"
+            "</div>"
+            for f in fotos[:8]
+        )
+        html += (
+            "<div class='sec'>FOTOS DE LA INSTALACI&Oacute;N</div>"
+            f"<div style='padding:10px 18px;'>{fotos_html}</div>"
+        )
+
+    return html
+
+
+@app.route("/api/descargar-libro-multiple", methods=["POST"])
+def descargar_libro_multiple():
+    """Combina múltiples libros PDF en uno solo y lo devuelve."""
+    data = request.get_json() or {}
+    refs = data.get("refs", [])
+    if not refs:
+        return jsonify({"error": "Sin referencias"}), 400
+    try:
+        import io
+        from pypdf import PdfWriter
+        writer = PdfWriter()
+        encontrados = 0
+        for ref in refs:
+            libro_path = os.path.join(PARTES_DIR, f"LIBRO_{ref}.pdf")
+            if os.path.exists(libro_path):
+                from pypdf import PdfReader
+                reader = PdfReader(libro_path)
+                for page in reader.pages:
+                    writer.add_page(page)
+                encontrados += 1
+        if not encontrados:
+            return jsonify({"error": "No se encontraron libros aprobados para las referencias dadas"}), 404
+        buf = io.BytesIO()
+        writer.write(buf)
+        buf.seek(0)
+        from flask import send_file
+        return send_file(buf, mimetype="application/pdf",
+                         as_attachment=True,
+                         download_name=f"partes_{__import__('datetime').date.today()}.pdf")
+    except ImportError:
+        return jsonify({"error": "Librería pypdf no disponible"}), 500
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
 
 @app.route("/api/descargar-libro/<ref>", methods=["GET"])
 def descargar_libro(ref):
@@ -950,7 +1412,7 @@ def _html_libro_revision(parte):
         "<div class='sec'>DATOS DEL CLIENTE</div>"
         f"<div class='grid g2'>"
         f"<div class='field'><span class='lbl'>RAZ&Oacute;N SOCIAL</span><span class='val'>{v('nomcom')}</span></div>"
-        f"<div class='field'><span class='lbl'>N&ordm; CLIENTE</span><span class='val'>{v('cliente_id')}</span></div></div>"
+        f"<div class='field'><span class='lbl'>N&ordm; CLIENTE</span><span class='val'>{v('cliente') or v('cliente_id')}</span></div></div>"
         f"<div class='grid g3'>"
         f"<div class='field'><span class='lbl'>DIRECCI&Oacute;N</span><span class='val'>{v('direccion')}</span></div>"
         f"<div class='field'><span class='lbl'>POBLACI&Oacute;N</span><span class='val'>{v('poblacion')}</span></div>"
@@ -958,7 +1420,15 @@ def _html_libro_revision(parte):
         f"<div class='grid g3'>"
         f"<div class='field'><span class='lbl'>TEL&Eacute;FONO</span><span class='val'>{v('tlfno')}</span></div>"
         f"<div class='field'><span class='lbl'>T&Eacute;CNICO</span><span class='val'>{v('tecnico')}</span></div>"
-        f"<div class='field'><span class='lbl'>CLAVE ADMIN</span><span class='val'>{v('adm1')}</span></div></div>"
+        f"<div class='field'><span class='lbl'>AVISO / CONTRATO</span><span class='val'>{v('aviso')} / {v('presupuesto') or v('contrato')}</span></div></div>"
+        f"<div class='grid g3'>"
+        f"<div class='field'><span class='lbl'>VIA / VIDEO</span><span class='val'>{v('via')} / {v('video')}</span></div>"
+        f"<div class='field'><span class='lbl'>IP / CAM IP</span><span class='val'>{v('ip')} / {v('camip')}</span></div>"
+        f"<div class='field'><span class='lbl'>PUERTO / P2P</span><span class='val'>{v('puerto')} / {v('p2p')}</span></div></div>"
+        f"<div class='grid g3'>"
+        f"<div class='field'><span class='lbl'>CLAVE ADMIN</span><span class='val'>{v('adm') or v('adm1')}</span></div>"
+        f"<div class='field'><span class='lbl'>USUARIO</span><span class='val'>{v('usr')}</span></div>"
+        f"<div class='field'><span class='lbl'>D&Iacute;AS GRABACI&Oacute;N</span><span class='val'>{v('dias')}</span></div></div>"
         "<div class='sec'>MATERIAL INSTALADO &mdash; COMPARATIVA CON PRESUPUESTO</div>"
         "<div class='leyenda'>"
         "<div class='ley-item'><div class='ley-box' style='background:#fff'></div> OK</div>"
@@ -974,11 +1444,46 @@ def _html_libro_revision(parte):
         f"</tr></thead><tbody>{filas_html}</tbody></table></div>"
         "<div class='sec'>OBSERVACIONES</div>"
         f"<div class='obs'>{v('obs')}</div>"
-        f"<div class='footer'>"
+        + _html_firma_fotos(parte)
+        + f"<div class='footer'>"
         "<span>SETEL Seguridad &mdash; T&eacute;cnicos de Servicios M&uacute;ltiples S.L. &mdash; Salamanca</span>"
         f"<span>Libro generado: {dt_apro}</span></div>"
         "</body></html>"
     )
+
+
+@app.route("/api/debug-producto", methods=["GET"])
+def debug_producto():
+    """Diagnóstico: muestra los campos exactos que devuelve Stel Order para un producto."""
+    barcode = request.args.get("barcode", "").strip()
+    if not barcode:
+        return "<h3>Uso: /api/debug-producto?barcode=REFERENCIA</h3><p>Pon la referencia de un producto que exista en Stel Order.</p>", 200
+    try:
+        rows = ""
+        for param_name, param_val in [("barcode", barcode), ("reference", barcode), ("name", barcode)]:
+            r = requests.get(f"{STEL_BASE_URL}/app/products",
+                             headers=HEADERS,
+                             params={param_name: param_val, "limit": 3},
+                             timeout=10)
+            rows += f"<tr><td><b>{param_name}={param_val}</b></td><td>HTTP {r.status_code}</td>"
+            if r.status_code == 200:
+                try:
+                    data = r.json()
+                    from flask import json as fjson
+                    rows += f"<td><pre style='font-size:11px'>{fjson.dumps(data, ensure_ascii=False, indent=2)[:3000]}</pre></td>"
+                except Exception as e:
+                    rows += f"<td>Error JSON: {e}</td>"
+            else:
+                rows += f"<td>{r.text[:300]}</td>"
+            rows += "</tr>"
+        return f"""<html><body style='font-family:monospace;padding:20px'>
+        <h2>Debug producto: {barcode}</h2>
+        <table border=1 cellpadding=6 style='border-collapse:collapse;width:100%'>
+        <tr><th>Parámetro</th><th>Status</th><th>Respuesta</th></tr>
+        {rows}
+        </table></body></html>""", 200
+    except Exception as e:
+        return f"<h3>Error: {e}</h3>", 500
 
 
 # ── Inicio ─────────────────────────────────────────────────────────────────────
